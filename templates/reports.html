@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Reports - CalorieTracker{% endblock %}
+
+{% block content %}
+<div class="reports-container">
+    <h2>📊 Deficit Reports</h2>
+
+    <!-- Weekly Report -->
+    <div class="card">
+        <h3>📅 This Week</h3>
+        
+        {% if weekly_summaries %}
+        <div class="report-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Calories In</th>
+                        <th>Burned</th>
+                        <th>Deficit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for day in weekly_summaries %}
+                    <tr>
+                        <td>{{ day.date }}</td>
+                        <td>{{ day.total_calories_in|int }}</td>
+                        <td>{{ day.total_burned|int }}</td>
+                        <td class="{% if day.deficit > 0 %}positive{% else %}negative{% endif %}">
+                            {% if day.deficit > 0 %}+{% endif %}{{ day.deficit|int }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="3"><strong>Total Deficit:</strong></td>
+                        <td class="{% if weekly_total > 0 %}positive{% else %}negative{% endif %}">
+                            <strong>{% if weekly_total > 0 %}+{% endif %}{{ weekly_total|int }} kcal</strong>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="report-summary">
+            <p><strong>Days logged:</strong> {{ weekly_summaries|length }}</p>
+            {% if weekly_total > 0 %}
+            <p class="positive-text">
+                <strong>Estimated fat loss:</strong> 
+                ~{{ (weekly_total / 7700)|round(2) }} kg / ~{{ (weekly_total / 3500)|round(2) }} lbs 🔥
+            </p>
+            {% else %}
+            <p class="negative-text">
+                <strong>Caloric surplus:</strong> {{ weekly_total|abs|int }} kcal
+            </p>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="empty-message">No data for this week yet.</p>
+        {% endif %}
+    </div>
+
+    <!-- Monthly Report -->
+    <div class="card">
+        <h3>📆 This Month</h3>
+        
+        {% if monthly_summaries %}
+        <div class="report-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Calories In</th>
+                        <th>Burned</th>
+                        <th>Deficit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for day in monthly_summaries %}
+                    <tr>
+                        <td>{{ day.date }}</td>
+                        <td>{{ day.total_calories_in|int }}</td>
+                        <td>{{ day.total_burned|int }}</td>
+                        <td class="{% if day.deficit > 0 %}positive{% else %}negative{% endif %}">
+                            {% if day.deficit > 0 %}+{% endif %}{{ day.deficit|int }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="total-row">
+                        <td colspan="3"><strong>Total Deficit:</strong></td>
+                        <td class="{% if monthly_total > 0 %}positive{% else %}negative{% endif %}">
+                            <strong>{% if monthly_total > 0 %}+{% endif %}{{ monthly_total|int }} kcal</strong>
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+
+        <div class="report-summary">
+            <p><strong>Days logged:</strong> {{ monthly_summaries|length }}</p>
+            {% if monthly_total > 0 %}
+            <p class="positive-text">
+                <strong>Estimated fat loss:</strong> 
+                ~{{ (monthly_total / 7700)|round(2) }} kg / ~{{ (monthly_total / 3500)|round(2) }} lbs 🔥
+            </p>
+            {% else %}
+            <p class="negative-text">
+                <strong>Caloric surplus:</strong> {{ monthly_total|abs|int }} kcal
+            </p>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="empty-message">No data for this month yet.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

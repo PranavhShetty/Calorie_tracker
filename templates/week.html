@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}This Week - CalorieTracker{% endblock %}
+
+{% block content %}
+<div class="week-container">
+    <div class="week-header">
+        <h2>📅 This Week Overview</h2>
+        <p class="week-range">{{ start_of_week }} to {{ end_of_week }}</p>
+    </div>
+
+    <div class="week-summary-card">
+        <div class="week-stat">
+            <span class="week-stat-label">Days Logged</span>
+            <span class="week-stat-value">{{ days_logged }}/7</span>
+        </div>
+        <div class="week-stat">
+            <span class="week-stat-label">Total Deficit</span>
+            <span class="week-stat-value {% if total_deficit > 0 %}positive{% else %}negative{% endif %}">
+                {% if total_deficit > 0 %}+{% endif %}{{ total_deficit|int }} kcal
+            </span>
+        </div>
+        {% if total_deficit > 0 %}
+        <div class="week-stat">
+            <span class="week-stat-label">Estimated Loss</span>
+            <span class="week-stat-value positive">~{{ (total_deficit / 7700)|round(2) }} kg</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="week-grid">
+        {% for day in week_days %}
+        <div class="day-card {% if day.is_today %}today{% endif %} {% if not day.logged %}not-logged{% endif %} {% if day.is_future %}future{% endif %}">
+            <div class="day-header">
+                <div class="day-info">
+                    <h3>{{ day.day_short }}</h3>
+                    <p class="day-date">{{ day.date }}</p>
+                </div>
+                
+                {% if day.is_today %}
+                <span class="day-badge today-badge">Today</span>
+                {% elif day.is_future %}
+                <span class="day-badge future-badge">Future</span>
+                {% elif not day.logged %}
+                <span class="day-badge missed-badge">Not Logged</span>
+                {% else %}
+                <span class="day-badge logged-badge">✓</span>
+                {% endif %}
+            </div>
+
+            {% if day.logged and day.summary %}
+            <div class="day-stats">
+                <div class="day-stat-row">
+                    <span class="stat-label">In:</span>
+                    <span class="stat-value">{{ day.summary.total_calories_in|int }}</span>
+                </div>
+                <div class="day-stat-row">
+                    <span class="stat-label">Out:</span>
+                    <span class="stat-value">{{ day.summary.total_burned|int }}</span>
+                </div>
+                <div class="day-stat-row deficit-row">
+                    <span class="stat-label">Net:</span>
+                    <span class="stat-value {% if day.summary.deficit > 0 %}positive{% else %}negative{% endif %}">
+                        {% if day.summary.deficit > 0 %}+{% endif %}{{ day.summary.deficit|int }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="day-actions">
+                <a href="{{ url_for('log_specific_day', date=day.date) }}" class="btn-edit">
+                    ✏️ Edit
+                </a>
+            </div>
+
+            {% elif not day.is_future %}
+            <div class="day-empty">
+                <p>📭</p>
+                <p>No data</p>
+            </div>
+
+            <div class="day-actions">
+                <a href="{{ url_for('log_specific_day', date=day.date) }}" class="btn-log-day">
+                    + Log
+                </a>
+            </div>
+
+            {% else %}
+            <div class="day-empty">
+                <p>⏳</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

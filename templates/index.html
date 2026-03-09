@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Home - CalorieTracker{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <div class="welcome-section">
+        <h2>Welcome back, {{ profile.name }}! 👋</h2>
+        <p class="subtitle">Your BMR: {{ profile.bmr|int }} kcal/day</p>
+    </div>
+
+    <!-- Unlogged Days Alert -->
+    {% if unlogged_days %}
+    <div class="alert-banner alert-danger">
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-content">
+            <h3>Missing Logs This Week!</h3>
+            <p>You haven't logged food for {{ unlogged_days|length }} day(s) this week:</p>
+            <div class="unlogged-days-list">
+                {% for day in unlogged_days %}
+                <a href="{{ url_for('log_specific_day', date=day.date) }}" class="unlogged-day-chip">
+                    {{ day.day_name }} ({{ day.date }})
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+        <a href="{{ url_for('week_view') }}" class="alert-action-btn">
+            View Week →
+        </a>
+    </div>
+    {% endif %}
+
+    {% if summary %}
+    <!-- Today's Summary Card -->
+    <!-- Today's Summary Card -->
+    <div class="summary-card">
+        <h3>📊 Today's Summary - {{ today }}</h3>
+        
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-label">Calories In</div>
+                <div class="stat-value">{{ summary.total_calories_in|int }}</div>
+            </div>
+            
+            <div class="stat-box">
+                <div class="stat-label">Total Burned</div>
+                <div class="stat-value">{{ summary.total_burned|int }}</div>
+            </div>
+            
+            <div class="stat-box {% if summary.deficit > 0 %}stat-positive{% else %}stat-negative{% endif %}">
+                <div class="stat-label">{% if summary.deficit > 0 %}Deficit{% else %}Surplus{% endif %}</div>
+                <div class="stat-value">{{ summary.deficit|abs|int }}</div>
+            </div>
+        </div>
+
+        <div class="macros-row">
+            <div class="macro-item">
+                <span class="macro-label">Protein</span>
+                <span class="macro-value">{{ summary.total_protein|round(1) }}g</span>
+            </div>
+            <div class="macro-item">
+                <span class="macro-label">Carbs</span>
+                <span class="macro-value">{{ summary.total_carbs|round(1) }}g</span>
+            </div>
+            <div class="macro-item">
+                <span class="macro-label">Fats</span>
+                <span class="macro-value">{{ summary.total_fats|round(1) }}g</span>
+            </div>
+        </div>
+
+        {% if food_entries %}
+        <div class="food-list">
+            <h4>Food Logged:</h4>
+            {% for entry in food_entries %}
+            <div class="food-item">
+                <span class="food-name">
+                    {{ entry.food_name }}
+                    {% if entry.is_saved_meal %}<span class="badge">SAVED</span>{% endif %}
+                </span>
+                <span class="food-cals">{{ entry.calories|int }} kcal</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if summary.workout_description %}
+        <div class="workout-info">
+            <strong>💪 Workout:</strong> {{ summary.workout_description }} ({{ summary.calories_burned|int }} kcal burned)
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <!-- No data for today -->
+    <div class="empty-state">
+        <h3>No data logged for today</h3>
+        <p>Start tracking your food and see your progress!</p>
+        <a href="{{ url_for('log_food') }}" class="btn btn-primary">Log Food Now</a>
+    </div>
+    {% endif %}
+
+    <!-- Weekly & Monthly Summary Cards -->
+    <div class="deficit-summary-grid">
+        <div class="deficit-card">
+            <div class="deficit-header">
+                <h3>📅 This Week</h3>
+                <span class="deficit-days">{{ weekly_days }} days logged</span>
+            </div>
+            <div class="deficit-amount {% if weekly_deficit > 0 %}positive{% else %}negative{% endif %}">
+                {% if weekly_deficit > 0 %}+{% endif %}{{ weekly_deficit|int }} kcal
+            </div>
+            {% if weekly_deficit > 0 %}
+            <div class="deficit-detail">
+                ~{{ (weekly_deficit / 7700)|round(2) }} kg / ~{{ (weekly_deficit / 3500)|round(2) }} lbs lost 🔥
+            </div>
+            {% else %}
+            <div class="deficit-detail negative-text">
+                Surplus: {{ weekly_deficit|abs|int }} kcal
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="deficit-card">
+            <div class="deficit-header">
+                <h3>📆 This Month</h3>
+                <span class="deficit-days">{{ monthly_days }} days logged</span>
+            </div>
+            <div class="deficit-amount {% if monthly_deficit > 0 %}positive{% else %}negative{% endif %}">
+                {% if monthly_deficit > 0 %}+{% endif %}{{ monthly_deficit|int }} kcal
+            </div>
+            {% if monthly_deficit > 0 %}
+            <div class="deficit-detail">
+                ~{{ (monthly_deficit / 7700)|round(2) }} kg / ~{{ (monthly_deficit / 3500)|round(2) }} lbs lost 🔥
+            </div>
+            {% else %}
+            <div class="deficit-detail negative-text">
+                Surplus: {{ monthly_deficit|abs|int }} kcal
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <a href="{{ url_for('log_food') }}" class="action-card">
+            <div class="action-icon">📝</div>
+            <div class="action-title">Log Food</div>
+        </a>
+        <a href="{{ url_for('reports') }}" class="action-card">
+            <div class="action-icon">📊</div>
+            <div class="action-title">View Reports</div>
+        </a>
+        <a href="{{ url_for('saved_meals_page') }}" class="action-card">
+            <div class="action-icon">📚</div>
+            <div class="action-title">Saved Meals</div>
+        </a>
+    </div>
+</div>
+{% endblock %}

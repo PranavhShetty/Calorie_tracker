@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Saved Meals - CalorieTracker{% endblock %}
+
+{% block content %}
+<div class="meals-container">
+    <div class="meals-header">
+        <h2>📚 Your Saved Meals Library</h2>
+        <button onclick="showAddMealModal()" class="btn btn-primary">+ Add New Meal</button>
+    </div>
+
+    {% if meals %}
+    <div class="meals-grid">
+        {% for meal in meals %}
+        <div class="meal-card">
+            <div class="meal-header">
+                <h3>{{ meal.label }}</h3>
+                <button onclick="deleteMeal('{{ meal.label }}')" class="btn-delete">🗑️</button>
+            </div>
+            
+            <div class="meal-macros">
+                <div class="meal-macro">
+                    <div class="macro-value">{{ meal.calories|int }}</div>
+                    <div class="macro-label">kcal</div>
+                </div>
+                <div class="meal-macro">
+                    <div class="macro-value">{{ meal.protein|round(1) }}g</div>
+                    <div class="macro-label">Protein</div>
+                </div>
+                <div class="meal-macro">
+                    <div class="macro-value">{{ meal.carbs|round(1) }}g</div>
+                    <div class="macro-label">Carbs</div>
+                </div>
+                <div class="meal-macro">
+                    <div class="macro-value">{{ meal.fats|round(1) }}g</div>
+                    <div class="macro-label">Fats</div>
+                </div>
+            </div>
+
+            {% if meal.aliases %}
+            <div class="meal-aliases">
+                <strong>Also known as:</strong> {{ meal.aliases|join(', ') }}
+            </div>
+            {% endif %}
+
+            {% if meal.description %}
+            <div class="meal-description">
+                {{ meal.description }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h3>No saved meals yet</h3>
+        <p>Save your frequently eaten meals to log them instantly!</p>
+        <button onclick="showAddMealModal()" class="btn btn-primary">Add Your First Meal</button>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Add Meal Modal -->
+<div id="addMealModal" class="modal" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add New Saved Meal</h3>
+            <button onclick="closeAddMealModal()" class="btn-close">×</button>
+        </div>
+        
+        <form id="addMealForm" onsubmit="saveMeal(event)">
+            <div class="form-group">
+                <label>Meal Label *</label>
+                <input type="text" id="mealLabel" placeholder="e.g., Mum's dal rice" required>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Calories *</label>
+                    <input type="number" id="mealCalories" step="0.1" required>
+                </div>
+                <div class="form-group">
+                    <label>Protein (g) *</label>
+                    <input type="number" id="mealProtein" step="0.1" required>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Carbs (g) *</label>
+                    <input type="number" id="mealCarbs" step="0.1" required>
+                </div>
+                <div class="form-group">
+                    <label>Fats (g) *</label>
+                    <input type="number" id="mealFats" step="0.1" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Aliases (comma separated)</label>
+                <input type="text" id="mealAliases" placeholder="e.g., mom's dal rice, dal chawal">
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <textarea id="mealDescription" rows="2" placeholder="What's in this meal?"></textarea>
+            </div>
+
+            <div class="modal-footer">
+                <button type="submit" class="btn btn-primary">Save Meal</button>
+                <button type="button" onclick="closeAddMealModal()" class="btn btn-secondary">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showAddMealModal() {
+    document.getElementById('addMealModal').style.display = 'flex';
+}
+
+function closeAddMealModal() {
+    document.getElementById('addMealModal').style.display = 'none';
+    document.getElementById('addMealForm').reset();
+}
+
+function saveMeal(event) {
+    event.preventDefault();
+    
+    const label = document.getElementById('mealLabel').value;
+    const calories = parseFloat(document.getElementById('mealCalories').value);
+    const protein = parseFloat(document.getElementById('mealProtein').value);
+    const carbs = parseFloat(document.getElementById('mealCarbs').value);
+    const fats = parseFloat(document.getElementById('mealFats').value);
+    const aliasesText = document.getElementById('mealAliases').value;
+    const description = document.getElementById('mealDescription').value;
+    
+    const aliases = aliasesText ? aliasesText.split(',').map(a => a.trim()) : [];
+    
+    fetch('/api/save-meal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            label: label,
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fats: fats,
+            aliases: aliases,
+            description: description
+        })
+    })
+    .then(res => {
+        // Log the response for debugging
+        console.log('Response status:', res.status);
+        return res.text(); // Get as text first
+    })
+    .then(text => {
+        console.log('Response text:', text);
+        try {
+            const data = JSON.parse(text); // Try to parse as JSON
+            if (data.success) {
+                alert('Meal saved successfully!');
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Unknown error'));
+            }
+        } catch (e) {
+            // Not JSON, probably an error page
+            console.error('Response is not JSON:', text);
+            alert('Server error. Check the console for details.');
+        }
+    })
+    .catch(err => {
+        console.error('Fetch error:', err);
+        alert('Error saving meal: ' + err);
+    });
+}
+
+function deleteMeal(label) {
+    if (!confirm(`Delete "${label}"?`)) {
+        return;
+    }
+    
+    fetch('/api/delete-meal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: label })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            alert('Meal deleted successfully!');
+            location.reload();
+        }
+    })
+    .catch(err => {
+        alert('Error deleting meal: ' + err);
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,328 @@
+{% extends "base.html" %}
+
+{% block title %}Log Day - CalorieTracker{% endblock %}
+
+{% block content %}
+<div class="log-container">
+    <div class="log-day-header">
+        <h2>📝 Log Food for {{ log_date }}</h2>
+        <a href="{{ url_for('week_view') }}" class="btn btn-secondary">← Back to Week</a>
+    </div>
+    
+    <!-- Step 1: Food Input -->
+    <div class="card" id="step1">
+        <h3>What did you eat on {{ log_date }}?</h3>
+        <p class="helper-text">Describe naturally or mention saved meals</p>
+        
+        <div class="form-group">
+            <textarea id="foodInput" rows="4" placeholder="I ate..."></textarea>
+        </div>
+        
+        <button onclick="parseFood()" class="btn btn-primary" id="parseBtn">
+            Calculate Macros
+        </button>
+        
+        <div id="loadingFood" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyzing your food with AI...</p>
+        </div>
+    </div>
+
+    <!-- Step 2: Review & Confirm Food -->
+    <div class="card" id="step2" style="display: none;">
+        <h3>Review Calculated Macros</h3>
+        
+        <div id="foodItemsDisplay"></div>
+        
+        <div class="totals-row" id="foodTotals"></div>
+        
+        <div class="button-group">
+            <button onclick="confirmFood()" class="btn btn-primary">Looks Good ✓</button>
+            <button onclick="resetFood()" class="btn btn-secondary">Start Over</button>
+        </div>
+    </div>
+
+    <!-- Step 3: Workout Input -->
+    <div class="card" id="step3" style="display: none;">
+        <h3>Did you work out on {{ log_date }}?</h3>
+        
+        <div class="form-group">
+            <label>Workout Description (or leave empty)</label>
+            <textarea id="workoutInput" rows="3" placeholder="e.g., gym - legs 60min, 10min jog"></textarea>
+        </div>
+        
+        <div class="form-group">
+            <label>Your Weight (kg)</label>
+            <input type="number" id="weightInput" value="70" step="0.1">
+        </div>
+        
+        <button onclick="calculateWorkout()" class="btn btn-primary" id="workoutBtn">
+            Calculate Calories Burned
+        </button>
+        <button onclick="skipWorkout()" class="btn btn-secondary">
+            Skip Workout
+        </button>
+        
+        <div id="loadingWorkout" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Calculating workout calories...</p>
+        </div>
+        
+        <div id="workoutDisplay" style="display: none;">
+            <div class="workout-result" id="workoutResult"></div>
+            <button onclick="confirmWorkout()" class="btn btn-primary">Confirm</button>
+            <button onclick="editWorkoutCalories()" class="btn btn-secondary">Edit Manually</button>
+        </div>
+    </div>
+
+    <!-- Step 4: Notes & Final Save -->
+    <div class="card" id="step4" style="display: none;">
+        <h3>Any notes for {{ log_date }}?</h3>
+        
+        <div class="form-group">
+            <textarea id="notesInput" rows="2" placeholder="Optional notes..."></textarea>
+        </div>
+        
+        <button onclick="saveFoodLog()" class="btn btn-primary btn-large" id="saveBtn">
+            💾 Save Log for {{ log_date }}
+        </button>
+    </div>
+
+    <!-- Success Message -->
+    <div class="card success-card" id="successMessage" style="display: none;">
+        <h3>✅ Logged Successfully!</h3>
+        <div id="finalSummary"></div>
+        <div class="button-group">
+            <a href="{{ url_for('week_view') }}" class="btn btn-primary">Back to Week View</a>
+        </div>
+    </div>
+</div>
+
+<script>
+let foodItems = [];
+let workoutCalories = 0;
+let workoutDescription = '';
+const logDate = "{{ log_date }}";
+
+function parseFood() {
+    const foodInput = document.getElementById('foodInput').value.trim();
+    
+    if (!foodInput) {
+        alert('Please enter what you ate');
+        return;
+    }
+    
+    document.getElementById('parseBtn').disabled = true;
+    document.getElementById('loadingFood').style.display = 'block';
+    
+    fetch('/api/parse-food', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ food_description: foodInput })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+            document.getElementById('parseBtn').disabled = false;
+            document.getElementById('loadingFood').style.display = 'none';
+            return;
+        }
+        
+        foodItems = data.items;
+        displayFoodItems();
+        
+        document.getElementById('step1').style.display = 'none';
+        document.getElementById('step2').style.display = 'block';
+    })
+    .catch(err => {
+        alert('Error calculating macros: ' + err);
+        document.getElementById('parseBtn').disabled = false;
+        document.getElementById('loadingFood').style.display = 'none';
+    });
+}
+
+function displayFoodItems() {
+    const container = document.getElementById('foodItemsDisplay');
+    container.innerHTML = '';
+    
+    let totalCals = 0, totalProtein = 0, totalCarbs = 0, totalFats = 0;
+    
+    foodItems.forEach((item, index) => {
+        totalCals += item.calories;
+        totalProtein += item.protein;
+        totalCarbs += item.carbs;
+        totalFats += item.fats;
+        
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'food-review-item';
+        itemDiv.innerHTML = `
+            <div class="food-review-header">
+                <strong>${item.food_name}</strong>
+                ${item.is_saved_meal ? '<span class="badge">SAVED</span>' : ''}
+            </div>
+            <div class="food-review-macros">
+                <span>${Math.round(item.calories)} kcal</span>
+                <span>P: ${item.protein.toFixed(1)}g</span>
+                <span>C: ${item.carbs.toFixed(1)}g</span>
+                <span>F: ${item.fats.toFixed(1)}g</span>
+            </div>
+            ${item.notes ? `<div class="food-review-note">${item.notes}</div>` : ''}
+        `;
+        container.appendChild(itemDiv);
+    });
+    
+    document.getElementById('foodTotals').innerHTML = `
+        <div class="total-label">TOTAL:</div>
+        <div class="total-values">
+            <strong>${Math.round(totalCals)} kcal</strong> | 
+            P: ${totalProtein.toFixed(1)}g | 
+            C: ${totalCarbs.toFixed(1)}g | 
+            F: ${totalFats.toFixed(1)}g
+        </div>
+    `;
+}
+
+function confirmFood() {
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('step3').style.display = 'block';
+}
+
+function resetFood() {
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('step1').style.display = 'block';
+    document.getElementById('parseBtn').disabled = false;
+    document.getElementById('loadingFood').style.display = 'none';
+    foodItems = [];
+}
+
+function calculateWorkout() {
+    const workoutInput = document.getElementById('workoutInput').value.trim();
+    const weight = parseFloat(document.getElementById('weightInput').value);
+    
+    if (!workoutInput) {
+        skipWorkout();
+        return;
+    }
+    
+    document.getElementById('workoutBtn').disabled = true;
+    document.getElementById('loadingWorkout').style.display = 'block';
+    
+    fetch('/api/calculate-workout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            workout_description: workoutInput,
+            weight: weight
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.error) {
+            alert('Error: ' + data.error);
+            return;
+        }
+        
+        workoutDescription = workoutInput;
+        workoutCalories = data.total_calories;
+        
+        let html = `<h4>Estimated Calories Burned: ${Math.round(data.total_calories)} kcal</h4>`;
+        
+        if (data.breakdown) {
+            html += '<div class="workout-breakdown">';
+            data.breakdown.forEach(activity => {
+                html += `<div class="workout-activity">
+                    <span>${activity.activity}</span>
+                    <span>${activity.duration_min} min → ${Math.round(activity.calories)} kcal</span>
+                </div>`;
+            });
+            html += '</div>';
+        }
+        
+        if (data.notes) {
+            html += `<p class="workout-note">${data.notes}</p>`;
+        }
+        
+        document.getElementById('workoutResult').innerHTML = html;
+        document.getElementById('loadingWorkout').style.display = 'none';
+        document.getElementById('workoutDisplay').style.display = 'block';
+    })
+    .catch(err => {
+        alert('Error calculating workout: ' + err);
+        document.getElementById('workoutBtn').disabled = false;
+        document.getElementById('loadingWorkout').style.display = 'none';
+    });
+}
+
+function skipWorkout() {
+    workoutCalories = 0;
+    workoutDescription = '';
+    document.getElementById('step3').style.display = 'none';
+    document.getElementById('step4').style.display = 'block';
+}
+
+function confirmWorkout() {
+    document.getElementById('step3').style.display = 'none';
+    document.getElementById('step4').style.display = 'block';
+}
+
+function editWorkoutCalories() {
+    const newCalories = prompt('Enter calories burned:', workoutCalories);
+    if (newCalories !== null) {
+        workoutCalories = parseFloat(newCalories);
+        document.getElementById('workoutResult').innerHTML = 
+            `<h4>Calories Burned: ${Math.round(workoutCalories)} kcal (manually entered)</h4>`;
+    }
+}
+
+function saveFoodLog() {
+    const notes = document.getElementById('notesInput').value.trim();
+    
+    document.getElementById('saveBtn').disabled = true;
+    document.getElementById('saveBtn').textContent = 'Saving...';
+    
+    fetch('/api/save-specific-day-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            log_date: logDate,
+            food_items: foodItems,
+            workout_description: workoutDescription,
+            calories_burned: workoutCalories,
+            notes: notes
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            const summary = data.summary;
+            
+            document.getElementById('finalSummary').innerHTML = `
+                <div class="final-stats">
+                    <div class="final-stat">
+                        <div class="final-label">Calories In</div>
+                        <div class="final-value">${Math.round(summary.total_calories_in)}</div>
+                    </div>
+                    <div class="final-stat">
+                        <div class="final-label">Total Burned</div>
+                        <div class="final-value">${Math.round(summary.total_burned)}</div>
+                    </div>
+                    <div class="final-stat ${summary.deficit > 0 ? 'positive' : 'negative'}">
+                        <div class="final-label">${summary.deficit > 0 ? 'Deficit' : 'Surplus'}</div>
+                        <div class="final-value">${Math.round(Math.abs(summary.deficit))}</div>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('step4').style.display = 'none';
+            document.getElementById('successMessage').style.display = 'block';
+        }
+    })
+    .catch(err => {
+        alert('Error saving log: ' + err);
+        document.getElementById('saveBtn').disabled = false;
+        document.getElementById('saveBtn').textContent = '💾 Save Log for ' + logDate;
+    });
+}
+</script>
+{% endblock %}

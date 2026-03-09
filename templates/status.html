@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Today - CalorieTracker{% endblock %}
+
+{% block content %}
+<div class="status-container">
+    <h2>📋 Today's Status - {{ today }}</h2>
+
+    {% if summary %}
+    <div class="summary-card-large">
+        <div class="summary-header">
+            <h3>Daily Summary</h3>
+        </div>
+
+        <div class="stats-grid-large">
+            <div class="stat-box-large">
+                <div class="stat-icon">🍽️</div>
+                <div class="stat-label">Calories In</div>
+                <div class="stat-value">{{ summary.total_calories_in|int }}</div>
+                <div class="stat-detail">
+                    P: {{ summary.total_protein|round(1) }}g | 
+                    C: {{ summary.total_carbs|round(1) }}g | 
+                    F: {{ summary.total_fats|round(1) }}g
+                </div>
+            </div>
+
+            <div class="stat-box-large">
+                <div class="stat-icon">🔥</div>
+                <div class="stat-label">Total Burned</div>
+                <div class="stat-value">{{ summary.total_burned|int }}</div>
+                <div class="stat-detail">
+                    BMR: {{ summary.bmr|int }} + 
+                    Workout: {{ summary.calories_burned|int }}
+                </div>
+            </div>
+
+            <div class="stat-box-large {% if summary.deficit > 0 %}stat-positive{% else %}stat-negative{% endif %}">
+                <div class="stat-icon">{% if summary.deficit > 0 %}🎯{% else %}⚠️{% endif %}</div>
+                <div class="stat-label">{% if summary.deficit > 0 %}Deficit{% else %}Surplus{% endif %}</div>
+                <div class="stat-value">{{ summary.deficit|abs|int }}</div>
+                <div class="stat-detail">
+                    {% if summary.deficit > 0 %}
+                        Great job staying in deficit!
+                    {% else %}
+                        Over your target today
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if food_entries %}
+    <div class="card">
+        <h3>🍽️ Food Logged Today ({{ food_entries|length }} items)</h3>
+        <div class="food-entries-list">
+            {% for entry in food_entries %}
+            <div class="food-entry-card">
+                <div class="food-entry-header">
+                    <strong>{{ entry.food_name }}</strong>
+                    {% if entry.is_saved_meal %}
+                    <span class="badge badge-saved">SAVED MEAL</span>
+                    {% endif %}
+                </div>
+                <div class="food-entry-macros">
+                    <span class="macro-pill">{{ entry.calories|int }} kcal</span>
+                    <span class="macro-pill">P: {{ entry.protein|round(1) }}g</span>
+                    <span class="macro-pill">C: {{ entry.carbs|round(1) }}g</span>
+                    <span class="macro-pill">F: {{ entry.fats|round(1) }}g</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if summary.workout_description %}
+    <div class="card workout-card">
+        <h3>💪 Workout</h3>
+        <p class="workout-description">{{ summary.workout_description }}</p>
+        <p class="workout-calories">Calories Burned: <strong>{{ summary.calories_burned|int }} kcal</strong></p>
+    </div>
+    {% endif %}
+
+    {% if summary.notes %}
+    <div class="card notes-card">
+        <h3>📝 Notes</h3>
+        <p>{{ summary.notes }}</p>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <h3>No data logged for today</h3>
+        <p>Start tracking to see your daily summary!</p>
+        <a href="{{ url_for('log_food') }}" class="btn btn-primary">Log Food Now</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
