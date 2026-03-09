@@ -368,7 +368,7 @@ def print_daily_summary(date: str):
 
 def save_weight(date, weight):
     """Save weight entry for a specific date"""
-    weight_collection = chroma_client.get_or_create_collection("weight_entries")
+    weight_collection = client.get_or_create_collection("weight_entries")
     
     weight_id = f"weight_{date}"
     
@@ -387,7 +387,7 @@ def save_weight(date, weight):
 
 def get_weight_for_date(date):
     """Get weight entry for a specific date"""
-    weight_collection = chroma_client.get_or_create_collection("weight_entries")
+    weight_collection = client.get_or_create_collection("weight_entries")
     
     try:
         result = weight_collection.get(ids=[f"weight_{date}"])
@@ -400,7 +400,7 @@ def get_weight_for_date(date):
 
 def get_weight_history(start_date, end_date):
     """Get all weight entries between two dates"""
-    weight_collection = chroma_client.get_or_create_collection("weight_entries")
+    weight_collection = client.get_or_create_collection("weight_entries")
     
     try:
         all_results = weight_collection.get()

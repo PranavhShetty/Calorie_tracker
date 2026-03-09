@@ -17,6 +17,16 @@ const API_URL = 'http://localhost:5000';
 function App() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('theme');
+    if (saved) return saved === 'dark';
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+    localStorage.setItem('theme', darkMode ? 'dark' : 'light');
+  }, [darkMode]);
 
   useEffect(() => {
     fetchProfile();
@@ -43,7 +53,7 @@ function App() {
           </div>
         ) : (
           <>
-            <Navbar profile={profile} />
+            <Navbar profile={profile} darkMode={darkMode} toggleDarkMode={() => setDarkMode(d => !d)} />
             <main className="container">
               <Routes>
                 <Route path="/" element={profile ? <Home profile={profile} /> : <Navigate to="/settings" />} />

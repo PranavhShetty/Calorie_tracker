@@ -430,6 +430,23 @@ def api_calculate_workout():
     return jsonify(result)
 
 
+@app.route('/api/transcribe', methods=['POST'])
+def api_transcribe():
+    """Transcribe audio using Groq Whisper"""
+    if 'audio' not in request.files:
+        return jsonify({'error': 'No audio file provided'}), 400
+
+    audio_file = request.files['audio']
+    audio_bytes = audio_file.read()
+    filename = audio_file.filename or 'audio.webm'
+
+    transcript = llm.transcribe_audio(audio_bytes, filename)
+    if transcript is None:
+        return jsonify({'error': 'Transcription failed'}), 500
+
+    return jsonify({'transcript': transcript})
+
+
 @app.route('/api/check-weight-today', methods=['GET'])
 def api_check_weight_today():
     """Check if weight was logged today"""

@@ -1870,6 +1870,273 @@ tr:hover {
     width: 100%;
   }
 }
+} /* close outer @media (max-width: 768px) opened at line 1283 */
 
-    
+/* ═══════════════════════════════════════════════════════════════════
+   NAVBAR UPDATES
+   ═══════════════════════════════════════════════════════════════════ */
+
+.navbar-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.nav-link-active {
+  color: var(--primary) !important;
+  font-weight: 700;
+}
+
+.btn-theme-toggle {
+  background: none;
+  border: 2px solid var(--border);
+  border-radius: 50%;
+  width: 38px;
+  height: 38px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.btn-theme-toggle:hover {
+  border-color: var(--primary);
+  background: var(--bg-main);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   MOBILE BOTTOM NAV
+   ═══════════════════════════════════════════════════════════════════ */
+
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Hide desktop nav links on mobile */
+  .nav-links {
+    display: none;
+  }
+
+  /* Bottom tab bar */
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid var(--border);
+    z-index: 200;
+    padding: 0.4rem 0;
+    padding-bottom: calc(0.4rem + env(safe-area-inset-bottom));
+  }
+
+  .mobile-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    text-decoration: none;
+    color: var(--text-secondary);
+    padding: 0.2rem 0;
+    transition: color 0.2s;
+  }
+
+  .mobile-nav-item.active,
+  .mobile-nav-item:hover {
+    color: var(--primary);
+  }
+
+  .mobile-nav-icon {
+    font-size: 1.35rem;
+    line-height: 1;
+  }
+
+  .mobile-nav-label {
+    font-size: 0.65rem;
+    font-weight: 600;
+  }
+
+  /* Push content above the bottom nav */
+  .container {
+    padding-bottom: 5rem;
+  }
+
+  /* Tighter navbar on mobile */
+  .navbar {
+    padding: 0.6rem 0;
+  }
+
+  .nav-brand h1 {
+    font-size: 1.15rem;
+  }
+
+  /* Full-width buttons on mobile */
+  .button-group {
+    flex-direction: column;
+  }
+
+  .button-group .btn {
+    width: 100%;
+  }
+
+  /* Macros wrap nicely on mobile */
+  .food-review-macros {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* Totals row stack on mobile */
+  .totals-row {
+    flex-direction: column;
+    gap: 0.5rem;
+    text-align: center;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DARK MODE
+   ═══════════════════════════════════════════════════════════════════ */
+
+html[data-theme="dark"] {
+  --bg-main: #121212;
+  --bg-card: #1E1E1E;
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --border: #374151;
+  --shadow: rgba(0, 0, 0, 0.5);
+}
+
+html[data-theme="dark"] body {
+  background: var(--bg-main);
+  color: var(--text-primary);
+}
+
+/* Surfaces */
+html[data-theme="dark"] .navbar,
+html[data-theme="dark"] .mobile-bottom-nav,
+html[data-theme="dark"] footer {
+  background: #1E1E1E;
+  border-color: #374151;
+}
+
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .action-card,
+html[data-theme="dark"] .deficit-card,
+html[data-theme="dark"] .day-card,
+html[data-theme="dark"] .meal-card,
+html[data-theme="dark"] .summary-card-large,
+html[data-theme="dark"] .alert-banner,
+html[data-theme="dark"] .modal-content {
+  background: #1E1E1E;
+  border-color: #374151;
+}
+
+html[data-theme="dark"] .food-review-item,
+html[data-theme="dark"] .stat-box-large,
+html[data-theme="dark"] .workout-breakdown,
+html[data-theme="dark"] .workout-result,
+html[data-theme="dark"] .bmr-examples,
+html[data-theme="dark"] .report-summary,
+html[data-theme="dark"] thead {
+  background: #2D2D2D;
+}
+
+html[data-theme="dark"] .day-card.not-logged {
+  background: #2a2000;
+}
+
+/* Text */
+html[data-theme="dark"] .card h3,
+html[data-theme="dark"] .action-title,
+html[data-theme="dark"] .action-card {
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .nav-link,
+html[data-theme="dark"] .mobile-nav-item {
+  color: var(--text-secondary);
+}
+
+html[data-theme="dark"] .mobile-nav-item.active,
+html[data-theme="dark"] .mobile-nav-item:hover,
+html[data-theme="dark"] .nav-link:hover,
+html[data-theme="dark"] .nav-link-active {
+  color: var(--primary);
+}
+
+/* Forms */
+html[data-theme="dark"] .form-group input,
+html[data-theme="dark"] .form-group textarea {
+  background: #2D2D2D;
+  color: var(--text-primary);
+  border-color: #374151;
+}
+
+html[data-theme="dark"] .form-group input::placeholder,
+html[data-theme="dark"] .form-group textarea::placeholder {
+  color: #6b7280;
+}
+
+/* Tables */
+html[data-theme="dark"] td {
+  border-color: #374151;
+}
+
+html[data-theme="dark"] tr:hover {
+  background: #2D2D2D;
+}
+
+html[data-theme="dark"] .total-row {
+  background: #2D2D2D;
+}
+
+/* Pills & badges */
+html[data-theme="dark"] .macro-pill {
+  background: #2D2D2D;
+  color: var(--text-secondary);
+}
+
+/* Voice button */
+html[data-theme="dark"] .btn-voice {
+  background: #2D2D2D;
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+html[data-theme="dark"] .btn-voice:hover {
+  background: var(--primary);
+  color: white;
+}
+
+/* Alert danger in dark */
+html[data-theme="dark"] .alert-danger {
+  background: #1E1E1E;
+  border-left-color: var(--danger);
+}
+
+/* Secondary btn in dark */
+html[data-theme="dark"] .btn-secondary {
+  background: #374151;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .btn-secondary:hover {
+  background: #4b5563;
+}
+
+/* Theme toggle */
+html[data-theme="dark"] .btn-theme-toggle {
+  border-color: #374151;
+  color: var(--text-primary);
+}
+
+html[data-theme="dark"] .btn-theme-toggle:hover {
+  border-color: var(--primary);
+  background: #2D2D2D;
 }

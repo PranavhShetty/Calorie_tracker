@@ -266,6 +266,20 @@ FORMULA: Calories = (MET × weight_kg × duration_hours)
 # MACRO VALIDATION
 # ═══════════════════════════════════════════════════════════════════
 
+def transcribe_audio(audio_bytes: bytes, filename: str = 'audio.webm'):
+    """Transcribe audio using Groq Whisper"""
+    try:
+        transcription = client.audio.transcriptions.create(
+            file=(filename, audio_bytes),
+            model='whisper-large-v3-turbo',
+            language='en',
+        )
+        return transcription.text
+    except Exception as e:
+        print(f'❌ Error transcribing audio: {e}')
+        return None
+
+
 def validate_macros(calories: float, protein: float, carbs: float, fats: float):
     """
     Validate that macros roughly add up to calories
