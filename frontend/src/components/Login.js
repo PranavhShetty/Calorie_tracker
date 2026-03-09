@@ -1,0 +1,73 @@
+import React, { useState } from 'react';
+import { GoogleLogin } from '@react-oauth/google';
+import axios from 'axios';
+
+function Login({ onLoginSuccess, apiUrl, darkMode }) {
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSuccess = async (credentialResponse) => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        `${apiUrl}/api/auth/google`,
+        { credential: credentialResponse.credential },
+        { withCredentials: true }
+      );
+      if (res.data.success) {
+        onLoginSuccess(res.data.user);
+      }
+    } catch (e) {
+      setError('Sign-in failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="login-screen">
+      <div className="login-card">
+        <div className="login-logo">🥗</div>
+        <h1 className="login-title">CalorieTracker</h1>
+        <p className="login-subtitle">
+          LLM-powered macro tracking<br />for Indian foods
+        </p>
+
+        <div className="login-divider" />
+
+        <p className="login-prompt">Sign in to continue</p>
+
+        {loading ? (
+          <div className="login-loading">
+            <div className="spinner" style={{ margin: '0 auto' }} />
+            <p style={{ marginTop: '0.75rem', color: 'var(--text-secondary)' }}>Signing you in…</p>
+          </div>
+        ) : (
+          <div className="login-google-btn">
+            <GoogleLogin
+              onSuccess={handleSuccess}
+              onError={() => setError('Sign-in failed. Please try again.')}
+              useOneTap
+              theme={darkMode ? 'filled_black' : 'outline'}
+              shape="rectangular"
+              size="large"
+              text="signin_with"
+              width="280"
+            />
+          </div>
+        )}
+
+        {error && (
+          <p className="login-error">{error}</p>
+        )}
+
+        <p className="login-footer">
+          Your data stays private. We only use your Google account to identify you.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export default Login;

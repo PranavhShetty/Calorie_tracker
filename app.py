@@ -13,15 +13,86 @@ print("=" * 50)
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session
 from flask_cors import CORS
+from google.oauth2 import id_token
+from google.auth.transport import requests as grequests
 import db
 import llm
 import meals
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 import os
 
+load_dotenv()
+
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
-app.secret_key = os.urandom(24)  # For session management
+# Stable secret key — sessions survive server restarts
+app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-change-in-production')
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = False  # Set True in production (HTTPS)
+
+CORS(app,
+     resources={r"/api/*": {"origins": "http://localhost:3000"}},
+     supports_credentials=True)
+
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
+
+
+# ═══════════════════════════════════════════════════════════════════
+# AUTH MIDDLEWARE
+# ═══════════════════════════════════════════════════════════════════
+
+@app.before_request
+def require_login():
+    """Block all /api/ requests (except auth endpoints) if not logged in."""
+    if request.method == 'OPTIONS':
+        return  # Allow CORS preflight
+    if request.path.startswith('/api/auth/'):
+        return  # Auth endpoints are public
+    if request.path.startswith('/api/') and 'user' not in session:
+        return jsonify({'error': 'Authentication required', 'code': 'UNAUTHENTICATED'}), 401
+
+
+# ═══════════════════════════════════════════════════════════════════
+# AUTH ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/api/auth/google', methods=['POST'])
+def auth_google():
+    """Verify Google ID token and create session."""
+    credential = request.get_json().get('credential')
+    if not credential:
+        return jsonify({'error': 'No credential provided'}), 400
+
+    if not GOOGLE_CLIENT_ID:
+        return jsonify({'error': 'GOOGLE_CLIENT_ID not configured on server'}), 500
+
+    try:
+        idinfo = id_token.verify_oauth2_token(
+            credential, grequests.Request(), GOOGLE_CLIENT_ID
+        )
+        session['user'] = {
+            'email': idinfo['email'],
+            'name':  idinfo.get('name', ''),
+            'picture': idinfo.get('picture', ''),
+            'sub':   idinfo['sub'],
+        }
+        return jsonify({'success': True, 'user': session['user']})
+    except ValueError as e:
+        return jsonify({'error': 'Invalid token', 'detail': str(e)}), 401
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    session.clear()
+    return jsonify({'success': True})
+
+
+@app.route('/api/auth/me', methods=['GET'])
+def auth_me():
+    user = session.get('user')
+    if user:
+        return jsonify({'user': user})
+    return jsonify({'user': None}), 401
 
 
 # ═══════════════════════════════════════════════════════════════════

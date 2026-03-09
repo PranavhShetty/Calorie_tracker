@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 
-function Navbar({ profile, darkMode, toggleDarkMode }) {
+function Navbar({ profile, user, darkMode, toggleDarkMode, onLogout }) {
+  const [showUserMenu, setShowUserMenu] = useState(false);
+
   const navLinkClass = ({ isActive }) => 'nav-link' + (isActive ? ' nav-link-active' : '');
   const mobileNavClass = ({ isActive }) => 'mobile-nav-item' + (isActive ? ' active' : '');
 
@@ -12,6 +14,7 @@ function Navbar({ profile, darkMode, toggleDarkMode }) {
           <div className="nav-brand">
             <h1>🥗 CalorieTracker</h1>
           </div>
+
           <div className="nav-links">
             <NavLink to="/" end className={navLinkClass}>Home</NavLink>
             <NavLink to="/log" className={navLinkClass}>Log Food</NavLink>
@@ -21,9 +24,40 @@ function Navbar({ profile, darkMode, toggleDarkMode }) {
             <NavLink to="/meals" className={navLinkClass}>Meals</NavLink>
             <NavLink to="/settings" className={navLinkClass}>Settings</NavLink>
           </div>
-          <button className="btn-theme-toggle" onClick={toggleDarkMode} title="Toggle dark mode">
-            {darkMode ? '☀️' : '🌙'}
-          </button>
+
+          <div className="nav-actions">
+            <button className="btn-theme-toggle" onClick={toggleDarkMode} title="Toggle dark mode">
+              {darkMode ? '☀️' : '🌙'}
+            </button>
+
+            {user && (
+              <div className="user-menu-wrap">
+                <button
+                  className="user-avatar-btn"
+                  onClick={() => setShowUserMenu(v => !v)}
+                  title={user.name}
+                >
+                  {user.picture
+                    ? <img src={user.picture} alt={user.name} className="user-avatar-img" referrerPolicy="no-referrer" />
+                    : <span className="user-avatar-fallback">{user.name?.[0] || '?'}</span>
+                  }
+                </button>
+
+                {showUserMenu && (
+                  <div className="user-menu" onMouseLeave={() => setShowUserMenu(false)}>
+                    <div className="user-menu-info">
+                      <strong>{user.name}</strong>
+                      <span>{user.email}</span>
+                    </div>
+                    <hr className="user-menu-divider" />
+                    <button className="user-menu-logout" onClick={onLogout}>
+                      🚪 Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </nav>
 
@@ -45,10 +79,10 @@ function Navbar({ profile, darkMode, toggleDarkMode }) {
           <span className="mobile-nav-icon">🍽️</span>
           <span className="mobile-nav-label">Meals</span>
         </NavLink>
-        <NavLink to="/settings" className={mobileNavClass}>
-          <span className="mobile-nav-icon">⚙️</span>
-          <span className="mobile-nav-label">Settings</span>
-        </NavLink>
+        <button className="mobile-nav-item mobile-nav-logout" onClick={onLogout} title="Sign out">
+          <span className="mobile-nav-icon">🚪</span>
+          <span className="mobile-nav-label">Logout</span>
+        </button>
       </nav>
     </>
   );
