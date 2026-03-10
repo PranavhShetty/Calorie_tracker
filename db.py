@@ -92,7 +92,8 @@ def _exec_turso(sql: str, args: list = None) -> _Result:
         json=payload,
         timeout=10,
     )
-    resp.raise_for_status()
+    if not resp.ok:
+        raise Exception(f"Turso HTTP {resp.status_code}: {resp.text}")
     data   = resp.json()
     result = data["results"][0]
     if result["type"] == "error":
