@@ -11,7 +11,7 @@ print("STARTING APP.PY")
 print("=" * 50)
 
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory
 from flask_cors import CORS
 from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
@@ -24,14 +24,20 @@ import os
 
 load_dotenv()
 
-app = Flask(__name__)
-# Stable secret key — sessions survive server restarts
+_is_production = os.getenv('RENDER', False)  # Render sets this env var automatically
+
+app = Flask(
+    __name__,
+    static_folder=os.path.join('frontend', 'build', 'static'),
+    static_url_path='/static'
+)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-change-in-production')
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False  # Set True in production (HTTPS)
+app.config['SESSION_COOKIE_SECURE'] = bool(_is_production)  # HTTPS only in prod
 
+_allowed_origins = ['http://localhost:3000'] if not _is_production else []
 CORS(app,
-     resources={r"/api/*": {"origins": "http://localhost:3000"}},
+     resources={r"/api/*": {"origins": _allowed_origins or "*"}},
      supports_credentials=True)
 
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
@@ -160,19 +166,15 @@ def index():
 
 @app.route('/api/save-profile', methods=['POST'])
 def api_save_profile():
-    """API endpoint to save/update profile"""
+    user_id = session['user']['sub']
     data = request.get_json()
-    name = data.get('name')
-    bmr = float(data.get('bmr'))
-    
-    db.save_profile(name, bmr)
-    
-    return jsonify({'success': True, 'profile': db.get_profile()})
+    db.save_profile(user_id, data.get('name'), float(data.get('bmr')))
+    return jsonify({'success': True, 'profile': db.get_profile(user_id)})
 
 @app.route('/api/profile', methods=['GET'])
 def api_get_profile():
-    """API endpoint to get user profile"""
-    profile = db.get_profile()
+    user_id = session['user']['sub']
+    profile = db.get_profile(user_id)
     if profile:
         return jsonify(profile)
     return jsonify(None), 404
@@ -180,45 +182,33 @@ def api_get_profile():
 
 @app.route('/api/home-data', methods=['GET'])
 def api_home_data():
-    """API endpoint for home page data"""
-    
-    profile = db.get_profile()
+    user_id = session['user']['sub']
+    profile = db.get_profile(user_id)
     if not profile:
         return jsonify({'error': 'No profile'}), 404
-    
+
     today = datetime.now()
     today_str = today.strftime("%Y-%m-%d")
-    summary = db.get_daily_summary(today_str)
-    food_entries = db.get_food_entries_for_date(today_str)
-    
-    # Weekly data
-    start_of_week = today - timedelta(days=today.weekday())
+    summary      = db.get_daily_summary(user_id, today_str)
+    food_entries = db.get_food_entries_for_date(user_id, today_str)
+
+    start_of_week  = today - timedelta(days=today.weekday())
     weekly_summaries = db.get_summaries_between_dates(
-        start_of_week.strftime("%Y-%m-%d"),
-        today_str
-    )
-    weekly_deficit = sum(s['deficit'] for s in weekly_summaries) if weekly_summaries else 0
-    
-    # Monthly data
+        user_id, start_of_week.strftime("%Y-%m-%d"), today_str)
+    weekly_deficit = sum(s['deficit'] for s in weekly_summaries)
+
     start_of_month = today.replace(day=1)
     monthly_summaries = db.get_summaries_between_dates(
-        start_of_month.strftime("%Y-%m-%d"),
-        today_str
-    )
-    monthly_deficit = sum(s['deficit'] for s in monthly_summaries) if monthly_summaries else 0
-    
-    # Unlogged days
+        user_id, start_of_month.strftime("%Y-%m-%d"), today_str)
+    monthly_deficit = sum(s['deficit'] for s in monthly_summaries)
+
     unlogged_days = []
     for i in range(today.weekday() + 1):
         check_day = start_of_week + timedelta(days=i)
         check_day_str = check_day.strftime("%Y-%m-%d")
-        day_summary = db.get_daily_summary(check_day_str)
-        if not day_summary:
-            unlogged_days.append({
-                'date': check_day_str,
-                'day_name': check_day.strftime("%A")
-            })
-    
+        if not db.get_daily_summary(user_id, check_day_str):
+            unlogged_days.append({'date': check_day_str, 'day_name': check_day.strftime("%A")})
+
     return jsonify({
         'summary': summary,
         'food_entries': food_entries,
@@ -229,103 +219,81 @@ def api_home_data():
 
 @app.route('/api/today-data', methods=['GET'])
 def api_today_data():
-    """API endpoint for today's detailed data"""
-    
-    profile = db.get_profile()
+    user_id = session['user']['sub']
+    profile = db.get_profile(user_id)
     if not profile:
         return jsonify({'error': 'No profile'}), 404
-    
     today = datetime.now().strftime("%Y-%m-%d")
-    summary = db.get_daily_summary(today)
-    food_entries = db.get_food_entries_for_date(today)
-    
     return jsonify({
-        'summary': summary,
-        'food_entries': food_entries
+        'summary':      db.get_daily_summary(user_id, today),
+        'food_entries': db.get_food_entries_for_date(user_id, today)
     })
 
 
 @app.route('/api/week-data', methods=['GET'])
 def api_week_data():
-    """API endpoint for this week's data"""
-    
-    profile = db.get_profile()
+    user_id = session['user']['sub']
+    profile = db.get_profile(user_id)
     if not profile:
         return jsonify({'error': 'No profile'}), 404
-    
+
     today = datetime.now()
     start_of_week = today - timedelta(days=today.weekday())
-    
-    # Generate all 7 days
+
     week_days = []
     for i in range(7):
         day = start_of_week + timedelta(days=i)
         day_str = day.strftime("%Y-%m-%d")
-        
-        summary = db.get_daily_summary(day_str)
-        food_entries = db.get_food_entries_for_date(day_str)
-        
+        summary      = db.get_daily_summary(user_id, day_str)
+        food_entries = db.get_food_entries_for_date(user_id, day_str)
         week_days.append({
-            'date': day_str,
-            'day_name': day.strftime("%A"),
-            'day_short': day.strftime("%a"),
-            'is_today': day.date() == today.date(),
-            'is_future': day.date() > today.date(),
-            'summary': summary,
+            'date':       day_str,
+            'day_name':   day.strftime("%A"),
+            'day_short':  day.strftime("%a"),
+            'is_today':   day.date() == today.date(),
+            'is_future':  day.date() > today.date(),
+            'summary':    summary,
             'food_count': len(food_entries) if food_entries else 0,
-            'logged': summary is not None
+            'logged':     summary is not None
         })
-    
-    # Calculate totals
-    total_deficit = sum(day['summary']['deficit'] for day in week_days if day['summary'])
-    days_logged = sum(1 for day in week_days if day['logged'])
-    
+
     return jsonify({
-        'week_days': week_days,
-        'total_deficit': total_deficit,
-        'days_logged': days_logged,
+        'week_days':     week_days,
+        'total_deficit': sum(d['summary']['deficit'] for d in week_days if d['summary']),
+        'days_logged':   sum(1 for d in week_days if d['logged']),
         'start_of_week': start_of_week.strftime("%Y-%m-%d"),
-        'end_of_week': (start_of_week + timedelta(days=6)).strftime("%Y-%m-%d")
+        'end_of_week':   (start_of_week + timedelta(days=6)).strftime("%Y-%m-%d")
     })
 
 @app.route('/api/reports-data', methods=['GET'])
 def api_reports_data():
-    """API endpoint for reports data"""
-    
-    profile = db.get_profile()
+    user_id = session['user']['sub']
+    profile = db.get_profile(user_id)
     if not profile:
         return jsonify({'error': 'No profile'}), 404
-    
+
     today = datetime.now()
-    
-    # Weekly
+    today_str = today.strftime("%Y-%m-%d")
+
     start_of_week = today - timedelta(days=today.weekday())
     weekly_summaries = db.get_summaries_between_dates(
-        start_of_week.strftime("%Y-%m-%d"),
-        today.strftime("%Y-%m-%d")
-    )
-    weekly_total = sum(s['deficit'] for s in weekly_summaries) if weekly_summaries else 0
-    
-    # Monthly
+        user_id, start_of_week.strftime("%Y-%m-%d"), today_str)
+
     start_of_month = today.replace(day=1)
     monthly_summaries = db.get_summaries_between_dates(
-        start_of_month.strftime("%Y-%m-%d"),
-        today.strftime("%Y-%m-%d")
-    )
-    monthly_total = sum(s['deficit'] for s in monthly_summaries) if monthly_summaries else 0
-    
+        user_id, start_of_month.strftime("%Y-%m-%d"), today_str)
+
     return jsonify({
-        'weekly_summaries': weekly_summaries,
+        'weekly_summaries':  weekly_summaries,
         'monthly_summaries': monthly_summaries,
-        'weekly_total': weekly_total,
-        'monthly_total': monthly_total
+        'weekly_total':      sum(s['deficit'] for s in weekly_summaries),
+        'monthly_total':     sum(s['deficit'] for s in monthly_summaries)
     })
 
 @app.route('/api/get-meals', methods=['GET'])
 def api_get_meals():
-    """API endpoint to get all saved meals"""
-    meals = db.get_all_saved_meals()
-    return jsonify({'meals': meals})
+    user_id = session['user']['sub']
+    return jsonify({'meals': db.get_all_saved_meals(user_id)})
 
 
 
@@ -392,20 +360,18 @@ def log_food():
 
 @app.route('/api/parse-food', methods=['POST'])
 def api_parse_food():
-    """API endpoint to parse food description with LLM"""
-    
+    user_id = session['user']['sub']
     data = request.get_json()
     food_description = data.get('food_description', '')
-    
+
     if not food_description:
         return jsonify({'error': 'No food description provided'}), 400
-    
-    # Check for saved meals first
+
     saved_items = []
     remaining_description = food_description
-    
-    all_saved_meals = db.get_all_saved_meals()
-    
+
+    all_saved_meals = db.get_all_saved_meals(user_id)
+
     for saved_meal in all_saved_meals:
         label = saved_meal['label'].lower()
         aliases = [alias.lower() for alias in saved_meal.get('aliases', [])]
@@ -443,24 +409,22 @@ def api_parse_food():
 
 @app.route('/api/save-food-log', methods=['POST'])
 def api_save_food_log():
-    """Save confirmed food items and workout to database"""
-    
+    user_id = session['user']['sub']
     data = request.get_json()
-    food_items = data.get('food_items', [])
+    food_items          = data.get('food_items', [])
     workout_description = data.get('workout_description', '')
-    calories_burned = float(data.get('calories_burned', 0))
-    notes = data.get('notes', '')
-    weight = data.get('weight')  # NEW: weight parameter
-    
+    calories_burned     = float(data.get('calories_burned', 0))
+    notes               = data.get('notes', '')
+    weight              = data.get('weight')
+
     today = datetime.now().strftime("%Y-%m-%d")
-    
-    # NEW: Save weight if provided
+
     if weight is not None:
-        db.save_weight(today, float(weight))
-    
-    # Save each food entry
+        db.save_weight(user_id, today, float(weight))
+
     for item in food_items:
         db.add_food_entry(
+            user_id=user_id,
             date=today,
             food_name=item['food_name'],
             calories=item['calories'],
@@ -470,15 +434,16 @@ def api_save_food_log():
             meal_type='meal',
             is_saved_meal=item.get('is_saved_meal', False)
         )
-    
-    # Calculate and save daily summary
+
     summary = db.calculate_and_save_daily_summary(
-        date=today,
+        user_id=user_id, date=today,
         workout_description=workout_description,
-        calories_burned=calories_burned,
-        notes=notes
+        calories_burned=calories_burned, notes=notes
     )
-    
+
+    # Enforce 6-month retention after every log save
+    db.cleanup_old_data(user_id)
+
     return jsonify({'success': True, 'summary': summary})
 
 
@@ -520,24 +485,21 @@ def api_transcribe():
 
 @app.route('/api/check-weight-today', methods=['GET'])
 def api_check_weight_today():
-    """Check if weight was logged today"""
+    user_id = session['user']['sub']
     today = datetime.now().strftime("%Y-%m-%d")
-    weight_entry = db.get_weight_for_date(today)
-    
-    return jsonify({'has_weight': weight_entry is not None})
+    return jsonify({'has_weight': db.get_weight_for_date(user_id, today) is not None})
 
 
 @app.route('/api/weight-history', methods=['GET'])
 def api_weight_history():
-    """Get weight history for charts"""
+    user_id = session['user']['sub']
     days = request.args.get('days', 30, type=int)
-    
     today = datetime.now()
-    start_date = (today - timedelta(days=days)).strftime("%Y-%m-%d")
-    end_date = today.strftime("%Y-%m-%d")
-    
-    weights = db.get_weight_history(start_date, end_date)
-    
+    weights = db.get_weight_history(
+        user_id,
+        (today - timedelta(days=days)).strftime("%Y-%m-%d"),
+        today.strftime("%Y-%m-%d")
+    )
     return jsonify({'weights': weights})
 
 # ═══════════════════════════════════════════════════════════════════
@@ -676,36 +638,28 @@ def log_specific_day(date):
 
 @app.route('/api/save-specific-day-log', methods=['POST'])
 def api_save_specific_day_log():
-    """Save food log for a specific date"""
-    
+    user_id = session['user']['sub']
     data = request.get_json()
-    log_date = data.get('log_date')
-    food_items = data.get('food_items', [])
+    log_date            = data.get('log_date')
+    food_items          = data.get('food_items', [])
     workout_description = data.get('workout_description', '')
-    calories_burned = float(data.get('calories_burned', 0))
-    notes = data.get('notes', '')
-    
-    # Save each food entry
+    calories_burned     = float(data.get('calories_burned', 0))
+    notes               = data.get('notes', '')
+
     for item in food_items:
         db.add_food_entry(
-            date=log_date,
+            user_id=user_id, date=log_date,
             food_name=item['food_name'],
-            calories=item['calories'],
-            protein=item['protein'],
-            carbs=item['carbs'],
-            fats=item['fats'],
-            meal_type='meal',
-            is_saved_meal=item.get('is_saved_meal', False)
+            calories=item['calories'], protein=item['protein'],
+            carbs=item['carbs'], fats=item['fats'],
+            meal_type='meal', is_saved_meal=item.get('is_saved_meal', False)
         )
-    
-    # Calculate and save daily summary
+
     summary = db.calculate_and_save_daily_summary(
-        date=log_date,
+        user_id=user_id, date=log_date,
         workout_description=workout_description,
-        calories_burned=calories_burned,
-        notes=notes
+        calories_burned=calories_burned, notes=notes
     )
-    
     return jsonify({'success': True, 'summary': summary})
 
 
@@ -730,38 +684,49 @@ def saved_meals_page():
 
 @app.route('/api/save-meal', methods=['POST'])
 def api_save_meal():
-    """API to save a new custom meal"""
-    
+    user_id = session['user']['sub']
     data = request.get_json()
-    
-    db.save_custom_meal(
-        label=data['label'],
-        calories=float(data['calories']),
-        protein=float(data['protein']),
-        carbs=float(data['carbs']),
-        fats=float(data['fats']),
-        description=data.get('description', ''),
-        aliases=data.get('aliases', [])
-    )
-    
-    return jsonify({'success': True})
+    try:
+        db.save_custom_meal(
+            user_id=user_id,
+            label=data['label'],
+            calories=float(data['calories']),
+            protein=float(data['protein']),
+            carbs=float(data['carbs']),
+            fats=float(data['fats']),
+            description=data.get('description', ''),
+            aliases=data.get('aliases', [])
+        )
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
 
 @app.route('/api/delete-meal', methods=['POST'])
 def api_delete_meal():
-    """API to delete a saved meal"""
-    
+    user_id = session['user']['sub']
     data = request.get_json()
-    label = data.get('label')
-    
-    db.delete_saved_meal(label)
-    
+    db.delete_saved_meal(user_id, data.get('label'))
     return jsonify({'success': True})
 
 
 # ═══════════════════════════════════════════════════════════════════
 # RUN SERVER
 # ═══════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════
+# SERVE REACT BUILD (production)
+# ═══════════════════════════════════════════════════════════════════
+
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_react(path):
+    build_dir = os.path.join(os.path.dirname(__file__), 'frontend', 'build')
+    file_path  = os.path.join(build_dir, path)
+    if path and os.path.exists(file_path):
+        return send_from_directory(build_dir, path)
+    return send_from_directory(build_dir, 'index.html')
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)

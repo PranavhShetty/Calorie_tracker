@@ -39,7 +39,7 @@ function useAudioTranscription(apiUrl) {
         try {
           const formData = new FormData();
           formData.append('audio', blob, 'audio.webm');
-          const res  = await fetch(`${apiUrl}/api/transcribe`, { method: 'POST', body: formData });
+          const res  = await fetch(`${apiUrl}/api/transcribe`, { method: 'POST', body: formData, credentials: 'include' });
           const data = await res.json();
           if (data.transcript) {
             onTextRef.current(prev => prev ? prev + ' ' + data.transcript : data.transcript);

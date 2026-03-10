@@ -1,422 +1,405 @@
 """
-Database layer using ChromaDB
-Handles all data storage and retrieval for calorie tracking
+Database layer — SQLite locally, Turso (HTTP API) in production.
+
+Local dev  : TURSO_DATABASE_URL not set  →  ./calorie_tracker.db  (Python sqlite3)
+Production : TURSO_DATABASE_URL=libsql://yourdb-org.turso.io
+             TURSO_AUTH_TOKEN=your-token
 """
 
-import chromadb
-from chromadb.config import Settings
-from datetime import datetime
-import json
+import os, json, sqlite3
+from datetime import datetime, timedelta
 
-# Initialize ChromaDB client
-client = chromadb.PersistentClient(path="./chroma_data")
+import requests as _requests
 
-# Create collections
-profile_collection = client.get_or_create_collection("user_profile")
-food_entries_collection = client.get_or_create_collection("food_entries")
-daily_summary_collection = client.get_or_create_collection("daily_summary")
-saved_meals_collection = client.get_or_create_collection("saved_meals")
+MAX_SAVED_MEALS = 5000
+RETENTION_DAYS  = 183   # ~6 months
 
+_TURSO_URL   = os.getenv("TURSO_DATABASE_URL", "")
+_TURSO_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
+_USE_TURSO   = bool(_TURSO_URL and _TURSO_URL.startswith("libsql://"))
+_LOCAL_DB    = "./calorie_tracker.db"
 
-# ═══════════════════════════════════════════════════════════════════
-# PROFILE FUNCTIONS
-# ═══════════════════════════════════════════════════════════════════
-
-def save_profile(name: str, bmr: float):
-    """Save or update user profile with BMR"""
-    profile_data = {
-        "name": name,
-        "bmr": bmr,
-        "created_at": datetime.now().isoformat()
+if _USE_TURSO:
+    _HTTP_URL = _TURSO_URL.replace("libsql://", "https://")
+    _HEADERS  = {
+        "Authorization": f"Bearer {_TURSO_TOKEN}",
+        "Content-Type":  "application/json",
     }
-    
-    profile_collection.upsert(
-        ids=["user_profile"],
-        documents=[json.dumps(profile_data)],
-        metadatas=[profile_data]
+
+
+# ── Result wrapper ────────────────────────────────────────────────────────────
+
+class _Result:
+    def __init__(self, columns, rows):
+        self.columns = tuple(columns)
+        self.rows    = rows   # list of tuples
+
+    def to_dict(self):
+        if not self.rows:
+            return None
+        return {self.columns[i]: self.rows[0][i] for i in range(len(self.columns))}
+
+    def to_dicts(self):
+        return [{self.columns[i]: row[i] for i in range(len(self.columns))}
+                for row in self.rows]
+
+
+# ── Execution layer ───────────────────────────────────────────────────────────
+
+def _turso_arg(v):
+    """Convert a Python value to a Turso typed arg."""
+    if v is None:
+        return {"type": "null"}
+    if isinstance(v, bool):
+        return {"type": "integer", "value": str(int(v))}
+    if isinstance(v, int):
+        return {"type": "integer", "value": str(v)}
+    if isinstance(v, float):
+        return {"type": "float", "value": str(v)}
+    return {"type": "text", "value": str(v)}
+
+
+def _turso_val(v):
+    """Parse a Turso response value (may be typed dict or raw Python value)."""
+    if v is None:
+        return None
+    if isinstance(v, dict):
+        t   = v.get("type")
+        val = v.get("value")
+        if t == "null" or val is None:
+            return None
+        if t == "integer":
+            return int(val)
+        if t == "float":
+            return float(val)
+        return str(val)
+    return v
+
+
+def _exec_turso(sql: str, args: list = None) -> _Result:
+    stmt = {"sql": sql}
+    if args:
+        stmt["args"] = [_turso_arg(a) for a in args]
+    payload = {
+        "requests": [
+            {"type": "execute", "stmt": stmt},
+            {"type": "close"},
+        ]
+    }
+    resp = _requests.post(
+        f"{_HTTP_URL}/v2/pipeline",
+        headers=_HEADERS,
+        json=payload,
+        timeout=10,
     )
-    print(f"✓ Profile saved: {name}, BMR: {bmr} kcal/day")
-    return profile_data
+    resp.raise_for_status()
+    data   = resp.json()
+    result = data["results"][0]
+    if result["type"] == "error":
+        raise Exception(result.get("error", {}).get("message", "Turso error"))
+    execute = result["response"]["result"]
+    columns = [c["name"] for c in execute["cols"]]
+    rows    = [tuple(_turso_val(v) for v in row) for row in execute["rows"]]
+    return _Result(columns, rows)
 
 
-def get_profile():
-    """Get user profile"""
-    try:
-        result = profile_collection.get(ids=["user_profile"])
-        if result['metadatas']:
-            return result['metadatas'][0]
-        return None
-    except:
-        return None
+def _exec_local(sql: str, args: list = None) -> _Result:
+    conn = sqlite3.connect(_LOCAL_DB)
+    cur  = conn.cursor()
+    cur.execute(sql, args or [])
+    cols = tuple(d[0] for d in cur.description) if cur.description else ()
+    rows = [tuple(row) for row in cur.fetchall()]
+    conn.commit()
+    conn.close()
+    return _Result(cols, rows)
 
 
-# ═══════════════════════════════════════════════════════════════════
-# FOOD ENTRIES FUNCTIONS (Individual items eaten each day)
-# ═══════════════════════════════════════════════════════════════════
+def _exec(sql: str, args: list = None) -> _Result:
+    if _USE_TURSO:
+        return _exec_turso(sql, args)
+    return _exec_local(sql, args)
 
-def add_food_entry(date: str, food_name: str, calories: float, 
-                   protein: float, carbs: float, fats: float, 
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _process_entry(d: dict) -> dict:
+    if d:
+        d["is_saved_meal"] = bool(d.get("is_saved_meal", 0))
+    return d
+
+
+def _process_meal(d: dict) -> dict:
+    if d:
+        raw = d.get("aliases") or "[]"
+        d["aliases"] = json.loads(raw) if isinstance(raw, str) else raw
+    return d
+
+
+# ── Schema init ───────────────────────────────────────────────────────────────
+
+def _init_schema():
+    ddl = [
+        """CREATE TABLE IF NOT EXISTS profiles (
+            user_id TEXT PRIMARY KEY, name TEXT NOT NULL,
+            bmr REAL NOT NULL, created_at TEXT NOT NULL)""",
+        """CREATE TABLE IF NOT EXISTS food_entries (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+            date TEXT NOT NULL, food_name TEXT NOT NULL,
+            calories REAL NOT NULL, protein REAL NOT NULL,
+            carbs REAL NOT NULL, fats REAL NOT NULL,
+            meal_type TEXT NOT NULL DEFAULT 'meal',
+            is_saved_meal INTEGER NOT NULL DEFAULT 0,
+            logged_at TEXT NOT NULL)""",
+        "CREATE INDEX IF NOT EXISTS idx_food_ud ON food_entries(user_id, date)",
+        """CREATE TABLE IF NOT EXISTS daily_summaries (
+            user_id TEXT NOT NULL, date TEXT NOT NULL,
+            total_calories_in REAL, total_protein REAL,
+            total_carbs REAL, total_fats REAL,
+            workout_description TEXT DEFAULT '',
+            calories_burned REAL DEFAULT 0, bmr REAL,
+            total_burned REAL, deficit REAL,
+            notes TEXT DEFAULT '', num_food_items INTEGER,
+            logged_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, date))""",
+        """CREATE TABLE IF NOT EXISTS saved_meals (
+            id TEXT PRIMARY KEY, user_id TEXT NOT NULL,
+            label TEXT NOT NULL, calories REAL NOT NULL,
+            protein REAL NOT NULL, carbs REAL NOT NULL,
+            fats REAL NOT NULL, description TEXT DEFAULT '',
+            aliases TEXT DEFAULT '[]', created_at TEXT NOT NULL)""",
+        "CREATE INDEX IF NOT EXISTS idx_meals_u ON saved_meals(user_id)",
+        """CREATE TABLE IF NOT EXISTS weight_entries (
+            user_id TEXT NOT NULL, date TEXT NOT NULL,
+            weight REAL NOT NULL, logged_at TEXT NOT NULL,
+            PRIMARY KEY (user_id, date))""",
+    ]
+    for stmt in ddl:
+        try:
+            _exec(stmt)
+        except Exception:
+            pass
+
+
+_init_schema()
+
+
+# ── Data retention ────────────────────────────────────────────────────────────
+
+def cleanup_old_data(user_id: str):
+    cutoff = (datetime.now() - timedelta(days=RETENTION_DAYS)).strftime("%Y-%m-%d")
+    _exec("DELETE FROM food_entries    WHERE user_id=? AND date<?", [user_id, cutoff])
+    _exec("DELETE FROM daily_summaries WHERE user_id=? AND date<?", [user_id, cutoff])
+    _exec("DELETE FROM weight_entries  WHERE user_id=? AND date<?", [user_id, cutoff])
+
+
+# ── Profile ───────────────────────────────────────────────────────────────────
+
+def save_profile(user_id: str, name: str, bmr: float):
+    _exec(
+        """INSERT INTO profiles (user_id,name,bmr,created_at) VALUES (?,?,?,?)
+           ON CONFLICT(user_id) DO UPDATE SET name=excluded.name, bmr=excluded.bmr""",
+        [user_id, name, float(bmr), datetime.now().isoformat()]
+    )
+    return get_profile(user_id)
+
+
+def get_profile(user_id: str):
+    return _exec("SELECT * FROM profiles WHERE user_id=?", [user_id]).to_dict()
+
+
+# ── Food entries ──────────────────────────────────────────────────────────────
+
+def add_food_entry(user_id: str, date: str, food_name: str,
+                   calories: float, protein: float, carbs: float, fats: float,
                    meal_type: str = "meal", is_saved_meal: bool = False):
-    """
-    Add a single food item eaten on a specific date
-    
-    Args:
-        date: Date in YYYY-MM-DD format
-        food_name: Name/description of the food
-        calories: Calorie count
-        protein: Protein in grams
-        carbs: Carbs in grams
-        fats: Fats in grams
-        meal_type: breakfast/lunch/dinner/snack
-        is_saved_meal: True if this came from saved meals library
-    """
-    
-    # Generate unique ID using date + timestamp
-    entry_id = f"{date}_{datetime.now().strftime('%H%M%S%f')}"
-    
-    entry_data = {
-        "date": date,
-        "food_name": food_name,
-        "calories": float(calories),
-        "protein": float(protein),
-        "carbs": float(carbs),
-        "fats": float(fats),
-        "meal_type": meal_type,
-        "is_saved_meal": is_saved_meal,
-        "logged_at": datetime.now().isoformat()
-    }
-    
-    food_entries_collection.add(
-        ids=[entry_id],
-        documents=[food_name],
-        metadatas=[entry_data]
+    eid = f"{user_id}__{date}_{datetime.now().strftime('%H%M%S%f')}"
+    now = datetime.now().isoformat()
+    _exec(
+        """INSERT INTO food_entries
+           (id,user_id,date,food_name,calories,protein,carbs,fats,
+            meal_type,is_saved_meal,logged_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+        [eid, user_id, date, food_name,
+         float(calories), float(protein), float(carbs), float(fats),
+         meal_type, 1 if is_saved_meal else 0, now]
     )
-    
-    return entry_data
+    return {"date": date, "food_name": food_name, "calories": calories,
+            "protein": protein, "carbs": carbs, "fats": fats,
+            "meal_type": meal_type, "is_saved_meal": is_saved_meal, "logged_at": now}
 
 
-def get_food_entries_for_date(date: str):
-    """Get all food items eaten on a specific date"""
-    all_entries = food_entries_collection.get()
-    
-    if not all_entries['metadatas']:
-        return []
-    
-    # Filter by date
-    entries = [
-        entry for entry in all_entries['metadatas']
-        if entry['date'] == date
-    ]
-    
-    # Sort by logged time
-    entries.sort(key=lambda x: x['logged_at'])
-    
-    return entries
+def get_food_entries_for_date(user_id: str, date: str) -> list:
+    r = _exec(
+        "SELECT * FROM food_entries WHERE user_id=? AND date=? ORDER BY logged_at",
+        [user_id, date]
+    )
+    return [_process_entry(d) for d in r.to_dicts()]
 
 
-# ═══════════════════════════════════════════════════════════════════
-# DAILY SUMMARY FUNCTIONS (Final deficit/surplus for the day)
-# ═══════════════════════════════════════════════════════════════════
+# ── Daily summary ─────────────────────────────────────────────────────────────
 
-def calculate_and_save_daily_summary(date: str, workout_description: str = "", 
+def calculate_and_save_daily_summary(user_id: str, date: str,
+                                      workout_description: str = "",
                                       calories_burned: float = 0, notes: str = ""):
-    """
-    Calculate totals from food entries and save daily summary
-    
-    Args:
-        date: Date in YYYY-MM-DD format
-        workout_description: What workout was done
-        calories_burned: Calories burned from workout (calculated by LLM)
-        notes: Any additional notes for the day
-    """
-    
-    # Get profile for BMR
-    profile = get_profile()
+    profile = get_profile(user_id)
     if not profile:
-        raise Exception("❌ No profile found. Run setup first.")
-    
-    bmr = profile['bmr']
-    
-    # Get all food entries for this date
-    food_entries = get_food_entries_for_date(date)
-    
-    if not food_entries:
-        print(f"⚠️  No food logged for {date}")
+        raise Exception("No profile found.")
+
+    entries = get_food_entries_for_date(user_id, date)
+    if not entries:
         return None
-    
-    # Calculate totals from all food entries
-    total_calories_in = sum(entry['calories'] for entry in food_entries)
-    total_protein = sum(entry['protein'] for entry in food_entries)
-    total_carbs = sum(entry['carbs'] for entry in food_entries)
-    total_fats = sum(entry['fats'] for entry in food_entries)
-    
-    # Calculate deficit/surplus
-    total_burned = bmr + calories_burned
-    deficit = total_burned - total_calories_in
-    
-    summary_data = {
-        "date": date,
-        "total_calories_in": round(total_calories_in, 1),
-        "total_protein": round(total_protein, 1),
-        "total_carbs": round(total_carbs, 1),
-        "total_fats": round(total_fats, 1),
-        "workout_description": workout_description,
-        "calories_burned": float(calories_burned),
-        "bmr": float(bmr),
-        "total_burned": round(total_burned, 1),
-        "deficit": round(deficit, 1),
-        "notes": notes,
-        "num_food_items": len(food_entries),
-        "logged_at": datetime.now().isoformat()
-    }
-    
-    daily_summary_collection.upsert(
-        ids=[f"summary_{date}"],
-        documents=[json.dumps(summary_data)],
-        metadatas=[summary_data]
+
+    bmr          = float(profile["bmr"])
+    cal          = sum(e["calories"] for e in entries)
+    prot         = sum(e["protein"]  for e in entries)
+    carbs        = sum(e["carbs"]    for e in entries)
+    fats         = sum(e["fats"]     for e in entries)
+    total_burned = bmr + float(calories_burned)
+    deficit      = total_burned - cal
+
+    _exec(
+        """INSERT INTO daily_summaries
+           (user_id,date,total_calories_in,total_protein,total_carbs,total_fats,
+            workout_description,calories_burned,bmr,total_burned,deficit,
+            notes,num_food_items,logged_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(user_id,date) DO UPDATE SET
+               total_calories_in=excluded.total_calories_in,
+               total_protein=excluded.total_protein,
+               total_carbs=excluded.total_carbs,
+               total_fats=excluded.total_fats,
+               workout_description=excluded.workout_description,
+               calories_burned=excluded.calories_burned,
+               bmr=excluded.bmr, total_burned=excluded.total_burned,
+               deficit=excluded.deficit, notes=excluded.notes,
+               num_food_items=excluded.num_food_items,
+               logged_at=excluded.logged_at""",
+        [user_id, date, round(cal,1), round(prot,1), round(carbs,1), round(fats,1),
+         workout_description or "", float(calories_burned), bmr,
+         round(total_burned,1), round(deficit,1),
+         notes or "", len(entries), datetime.now().isoformat()]
     )
-    
-    return summary_data
+    return get_daily_summary(user_id, date)
 
 
-def get_daily_summary(date: str):
-    """Get summary for a specific date"""
-    try:
-        result = daily_summary_collection.get(ids=[f"summary_{date}"])
-        if result['metadatas']:
-            return result['metadatas'][0]
-        return None
-    except:
-        return None
+def get_daily_summary(user_id: str, date: str):
+    return _exec(
+        "SELECT * FROM daily_summaries WHERE user_id=? AND date=?",
+        [user_id, date]
+    ).to_dict()
 
 
-def get_summaries_between_dates(start_date: str, end_date: str):
-    """Get all daily summaries between two dates for weekly/monthly reports"""
-    all_summaries = daily_summary_collection.get()
-    
-    if not all_summaries['metadatas']:
-        return []
-    
-    # Filter by date range
-    filtered = [
-        summary for summary in all_summaries['metadatas']
-        if start_date <= summary['date'] <= end_date
-    ]
-    
-    # Sort by date
-    filtered.sort(key=lambda x: x['date'])
-    return filtered
+def get_summaries_between_dates(user_id: str, start_date: str, end_date: str) -> list:
+    return _exec(
+        "SELECT * FROM daily_summaries WHERE user_id=? AND date>=? AND date<=? ORDER BY date",
+        [user_id, start_date, end_date]
+    ).to_dicts()
 
 
-# ═══════════════════════════════════════════════════════════════════
-# SAVED MEALS LIBRARY (User's custom labeled meals)
-# ═══════════════════════════════════════════════════════════════════
+# ── Saved meals ───────────────────────────────────────────────────────────────
 
-def save_custom_meal(label: str, calories: float, protein: float, carbs: float, 
-                     fats: float, description: str = "", aliases: list = None):
-    """
-    Save a custom meal with user-defined label to the library
-    Only called when user explicitly wants to save a meal
-    
-    Args:
-        label: User's custom name (e.g., "Mum's dal rice", "Gym day breakfast")
-        calories: Total calories
-        protein: Protein in grams
-        carbs: Carbs in grams
-        fats: Fats in grams
-        description: What's actually in the meal (optional)
-        aliases: Other names user might use (e.g., ["mom's dal rice", "dal chawal"])
-    """
+def _meal_id(user_id: str, label: str) -> str:
+    return f"{user_id}__{label.lower().replace(' ','_').replace(chr(39),'')}"
+
+
+def count_saved_meals(user_id: str) -> int:
+    r = _exec("SELECT COUNT(*) AS cnt FROM saved_meals WHERE user_id=?", [user_id])
+    return int(r.rows[0][0]) if r.rows else 0
+
+
+def save_custom_meal(user_id: str, label: str, calories: float, protein: float,
+                     carbs: float, fats: float, description: str = "", aliases: list = None):
     if aliases is None:
         aliases = []
-    
-    # Add the label to searchable names
-    all_names = [label.lower()] + [alias.lower() for alias in aliases]
-    
-    meal_data = {
-        "label": label,
-        "calories": float(calories),
-        "protein": float(protein),
-        "carbs": float(carbs),
-        "fats": float(fats),
-        "description": description,
-        "aliases": aliases,
-        "created_at": datetime.now().isoformat()
-    }
-    
-    # Use label as ID (lowercase, replace spaces with underscores)
-    meal_id = label.lower().replace(" ", "_").replace("'", "")
-    
-    saved_meals_collection.upsert(
-        ids=[meal_id],
-        documents=[" ".join(all_names)],  # Searchable text
-        metadatas=[meal_data]
+    mid = _meal_id(user_id, label)
+    is_new = not _exec("SELECT id FROM saved_meals WHERE id=?", [mid]).rows
+    if is_new and count_saved_meals(user_id) >= MAX_SAVED_MEALS:
+        raise Exception(f"Saved meals limit reached ({MAX_SAVED_MEALS}). Delete some to add new ones.")
+
+    _exec(
+        """INSERT INTO saved_meals
+           (id,user_id,label,calories,protein,carbs,fats,description,aliases,created_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)
+           ON CONFLICT(id) DO UPDATE SET
+               calories=excluded.calories, protein=excluded.protein,
+               carbs=excluded.carbs, fats=excluded.fats,
+               description=excluded.description, aliases=excluded.aliases""",
+        [mid, user_id, label, float(calories), float(protein),
+         float(carbs), float(fats), description or "",
+         json.dumps(aliases), datetime.now().isoformat()]
     )
-    
-    print(f"✓ Saved meal: '{label}' to your library")
-    return meal_data
+    return _process_meal(
+        _exec("SELECT * FROM saved_meals WHERE id=?", [mid]).to_dict()
+    )
 
 
-def search_saved_meal(query: str):
-    """
-    Search for a saved meal by label or alias
-    Returns None if not found
-    """
+def search_saved_meal(user_id: str, query: str):
+    q = query.lower()
+    r = _exec(
+        "SELECT * FROM saved_meals WHERE user_id=? AND (LOWER(label)=? OR LOWER(label) LIKE ?) LIMIT 1",
+        [user_id, q, f"%{q}%"]
+    )
+    if r.rows:
+        return _process_meal(r.to_dict())
+    for meal in get_all_saved_meals(user_id):
+        aliases = [a.lower() for a in meal.get("aliases", [])]
+        if q in aliases or any(a in q for a in aliases):
+            return meal
+    return None
+
+
+def get_all_saved_meals(user_id: str) -> list:
+    return [_process_meal(d) for d in
+            _exec("SELECT * FROM saved_meals WHERE user_id=? ORDER BY created_at DESC",
+                  [user_id]).to_dicts()]
+
+
+def delete_saved_meal(user_id: str, label: str) -> bool:
     try:
-        results = saved_meals_collection.query(
-            query_texts=[query.lower()],
-            n_results=1
-        )
-        
-        if results['metadatas'] and results['metadatas'][0]:
-            return results['metadatas'][0][0]
-        return None
-    except:
-        return None
-
-
-def get_all_saved_meals():
-    """Get all saved meals from library"""
-    all_meals = saved_meals_collection.get()
-    if all_meals['metadatas']:
-        # Sort by creation date
-        meals = all_meals['metadatas']
-        meals.sort(key=lambda x: x.get('created_at', ''), reverse=True)
-        return meals
-    return []
-
-
-def delete_saved_meal(label: str):
-    """Delete a meal from library"""
-    meal_id = label.lower().replace(" ", "_").replace("'", "")
-    try:
-        saved_meals_collection.delete(ids=[meal_id])
-        print(f"✓ Deleted '{label}' from your library")
+        _exec("DELETE FROM saved_meals WHERE id=?", [_meal_id(user_id, label)])
         return True
-    except:
-        print(f"❌ Could not find '{label}' in library")
+    except Exception:
         return False
 
 
-def update_saved_meal(label: str, calories: float = None, protein: float = None, 
-                      carbs: float = None, fats: float = None):
-    """Update macros for an existing saved meal"""
-    meal = search_saved_meal(label)
+def update_saved_meal(user_id: str, label: str, calories=None,
+                      protein=None, carbs=None, fats=None):
+    meal = search_saved_meal(user_id, label)
     if not meal:
-        print(f"❌ Meal '{label}' not found")
         return None
-    
-    # Update only provided values
-    if calories is not None:
-        meal['calories'] = float(calories)
-    if protein is not None:
-        meal['protein'] = float(protein)
-    if carbs is not None:
-        meal['carbs'] = float(carbs)
-    if fats is not None:
-        meal['fats'] = float(fats)
-    
-    # Re-save
-    return save_custom_meal(
-        label=meal['label'],
-        calories=meal['calories'],
-        protein=meal['protein'],
-        carbs=meal['carbs'],
-        fats=meal['fats'],
-        description=meal.get('description', ''),
-        aliases=meal.get('aliases', [])
+    if calories is not None: meal["calories"] = float(calories)
+    if protein  is not None: meal["protein"]  = float(protein)
+    if carbs    is not None: meal["carbs"]    = float(carbs)
+    if fats     is not None: meal["fats"]     = float(fats)
+    return save_custom_meal(user_id=user_id, label=meal["label"],
+                            calories=meal["calories"], protein=meal["protein"],
+                            carbs=meal["carbs"], fats=meal["fats"],
+                            description=meal.get("description",""),
+                            aliases=meal.get("aliases",[]))
+
+
+# ── Weight ────────────────────────────────────────────────────────────────────
+
+def save_weight(user_id: str, date: str, weight: float):
+    _exec(
+        """INSERT INTO weight_entries (user_id,date,weight,logged_at)
+           VALUES (?,?,?,?)
+           ON CONFLICT(user_id,date) DO UPDATE SET
+               weight=excluded.weight, logged_at=excluded.logged_at""",
+        [user_id, date, float(weight), datetime.now().isoformat()]
     )
+    return {"date": date, "weight": weight}
 
 
-# ═══════════════════════════════════════════════════════════════════
-# UTILITY FUNCTIONS
-# ═══════════════════════════════════════════════════════════════════
-
-def print_daily_summary(date: str):
-    """Pretty print daily summary"""
-    summary = get_daily_summary(date)
-    if not summary:
-        print(f"No summary found for {date}")
-        return
-    
-    print(f"\n{'='*50}")
-    print(f"📊 Daily Summary for {date}")
-    print(f"{'='*50}")
-    print(f"Calories consumed:     {summary['total_calories_in']:>8.0f} kcal")
-    print(f"  Protein:  {summary['total_protein']:>5.1f}g")
-    print(f"  Carbs:    {summary['total_carbs']:>5.1f}g")
-    print(f"  Fats:     {summary['total_fats']:>5.1f}g")
-    print(f"\nBMR (resting):         {summary['bmr']:>8.0f} kcal")
-    if summary['calories_burned'] > 0:
-        print(f"Workout burn:          {summary['calories_burned']:>8.0f} kcal")
-        print(f"  ({summary['workout_description']})")
-    print(f"{'─'*50}")
-    print(f"Total burned:          {summary['total_burned']:>8.0f} kcal")
-    print(f"{'='*50}")
-    
-    if summary['deficit'] > 0:
-        print(f"✓ DEFICIT:  {summary['deficit']:>8.0f} kcal  🔥")
-    else:
-        print(f"⚠️  SURPLUS: {abs(summary['deficit']):>8.0f} kcal")
-    
-    print(f"{'='*50}\n")
-    
-    if summary.get('notes'):
-        print(f"Notes: {summary['notes']}\n")
+def get_weight_for_date(user_id: str, date: str):
+    return _exec(
+        "SELECT * FROM weight_entries WHERE user_id=? AND date=?",
+        [user_id, date]
+    ).to_dict()
 
 
-
-def save_weight(date, weight):
-    """Save weight entry for a specific date"""
-    weight_collection = client.get_or_create_collection("weight_entries")
-    
-    weight_id = f"weight_{date}"
-    
-    weight_collection.upsert(
-        ids=[weight_id],
-        documents=[f"Weight entry for {date}"],
-        metadatas=[{
-            'date': date,
-            'weight': weight,
-            'logged_at': datetime.now().isoformat()
-        }]
-    )
-    
-    return {'date': date, 'weight': weight}
-
-
-def get_weight_for_date(date):
-    """Get weight entry for a specific date"""
-    weight_collection = client.get_or_create_collection("weight_entries")
-    
-    try:
-        result = weight_collection.get(ids=[f"weight_{date}"])
-        if result and result['ids']:
-            return result['metadatas'][0]
-        return None
-    except:
-        return None
-
-
-def get_weight_history(start_date, end_date):
-    """Get all weight entries between two dates"""
-    weight_collection = client.get_or_create_collection("weight_entries")
-    
-    try:
-        all_results = weight_collection.get()
-        
-        if not all_results or not all_results['metadatas']:
-            return []
-        
-        # Filter by date range
-        weights = []
-        for metadata in all_results['metadatas']:
-            entry_date = metadata.get('date')
-            if start_date <= entry_date <= end_date:
-                weights.append(metadata)
-        
-        # Sort by date
-        weights.sort(key=lambda x: x['date'])
-        return weights
-    except:
-        return []
+def get_weight_history(user_id: str, start_date: str, end_date: str) -> list:
+    return _exec(
+        "SELECT * FROM weight_entries WHERE user_id=? AND date>=? AND date<=? ORDER BY date",
+        [user_id, start_date, end_date]
+    ).to_dicts()

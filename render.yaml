@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: calorie-tracker
+    runtime: python
+    buildCommand: |
+      pip install -r requirements.txt
+      cd frontend && npm install && npm run build
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false          # You set this manually in Render dashboard
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true  # Render auto-generates a secure random value
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: RENDER
+        value: true

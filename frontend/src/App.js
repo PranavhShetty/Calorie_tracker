@@ -14,7 +14,8 @@ import Reports from './components/Reports';
 import Meals from './components/Meals';
 import Settings from './components/Settings';
 
-const API_URL = 'http://localhost:5000';
+// Empty string in production (Flask serves both API + React from same origin)
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 // Send cookies with every request (required for Flask sessions)
 axios.defaults.withCredentials = true;

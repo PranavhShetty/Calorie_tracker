@@ -1,8 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 
 function Navbar({ profile, user, darkMode, toggleDarkMode, onLogout }) {
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isWide, setIsWide] = useState(window.innerWidth > 960);
+
+  useEffect(() => {
+    const handler = () => setIsWide(window.innerWidth > 960);
+    window.addEventListener('resize', handler);
+    return () => window.removeEventListener('resize', handler);
+  }, []);
 
   const navLinkClass = ({ isActive }) => 'nav-link' + (isActive ? ' nav-link-active' : '');
   const mobileNavClass = ({ isActive }) => 'mobile-nav-item' + (isActive ? ' active' : '');
@@ -15,15 +22,17 @@ function Navbar({ profile, user, darkMode, toggleDarkMode, onLogout }) {
             <h1>🥗 CalorieTracker</h1>
           </div>
 
-          <div className="nav-links">
-            <NavLink to="/" end className={navLinkClass}>Home</NavLink>
-            <NavLink to="/log" className={navLinkClass}>Log Food</NavLink>
-            <NavLink to="/today" className={navLinkClass}>Today</NavLink>
-            <NavLink to="/week" className={navLinkClass}>This Week</NavLink>
-            <NavLink to="/reports" className={navLinkClass}>Reports</NavLink>
-            <NavLink to="/meals" className={navLinkClass}>Meals</NavLink>
-            <NavLink to="/settings" className={navLinkClass}>Settings</NavLink>
-          </div>
+          {isWide && (
+            <div className="nav-links">
+              <NavLink to="/" end className={navLinkClass}>Home</NavLink>
+              <NavLink to="/log" className={navLinkClass}>Log Food</NavLink>
+              <NavLink to="/today" className={navLinkClass}>Today</NavLink>
+              <NavLink to="/week" className={navLinkClass}>This Week</NavLink>
+              <NavLink to="/reports" className={navLinkClass}>Reports</NavLink>
+              <NavLink to="/meals" className={navLinkClass}>Meals</NavLink>
+              <NavLink to="/settings" className={navLinkClass}>Settings</NavLink>
+            </div>
+          )}
 
           <div className="nav-actions">
             <button className="btn-theme-toggle" onClick={toggleDarkMode} title="Toggle dark mode">
