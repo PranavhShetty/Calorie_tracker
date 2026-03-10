@@ -666,8 +666,11 @@ def api_delete_meal():
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_react(path):
-    build_dir = os.path.join(os.path.dirname(__file__), 'frontend', 'build')
-    file_path  = os.path.join(build_dir, path)
+    build_dir = os.path.join(app.root_path, 'frontend', 'build')
+    print(f"[serve_react] build_dir={build_dir} exists={os.path.exists(build_dir)} path={path!r}")
+    if not os.path.exists(build_dir):
+        return f"Build dir not found: {build_dir}", 404
+    file_path = os.path.join(build_dir, path)
     if path and os.path.exists(file_path):
         return send_from_directory(build_dir, path)
     return send_from_directory(build_dir, 'index.html')
