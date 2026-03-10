@@ -242,66 +242,11 @@ def api_get_meals():
 
 
 
-# ═══════════════════════════════════════════════════════════════════
-# SETUP
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/setup', methods=['GET', 'POST'])
-def setup():
-    """Setup page for first-time users"""
-    
-    if request.method == 'POST':
-        name = request.form.get('name', 'User')
-        bmr = float(request.form.get('bmr'))
-        
-        db.save_profile(name, bmr)
-        
-        return redirect(url_for('index'))
-    
-    return render_template('setup.html')
-
-
-    # ═══════════════════════════════════════════════════════════════════
-# SETTINGS / EDIT PROFILE
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/settings', methods=['GET', 'POST'])
-def settings():
-    """Settings page to update profile (BMR, name)"""
-    
-    profile = db.get_profile()
-    if not profile:
-        return redirect(url_for('setup'))
-    
-    if request.method == 'POST':
-        name = request.form.get('name', profile['name'])
-        bmr = float(request.form.get('bmr'))
-        
-        db.save_profile(name, bmr)
-        
-        return redirect(url_for('index'))
-    
-    return render_template('settings.html', profile=profile)
 
 
 # ═══════════════════════════════════════════════════════════════════
 # LOG FOOD
 # ═══════════════════════════════════════════════════════════════════
-
-@app.route('/log', methods=['GET', 'POST'])
-def log_food():
-    """Log food page"""
-    
-    profile = db.get_profile()
-    if not profile:
-        return redirect(url_for('setup'))
-    
-    if request.method == 'POST':
-        # This will be handled by AJAX
-        pass
-    
-    return render_template('log.html', profile=profile)
-
 
 @app.route('/api/parse-food', methods=['POST'])
 def api_parse_food():
@@ -447,140 +392,6 @@ def api_weight_history():
     )
     return jsonify({'weights': weights})
 
-# ═══════════════════════════════════════════════════════════════════
-# STATUS / TODAY
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/status')
-def status():
-    """Today's status page"""
-    
-    profile = db.get_profile()
-    if not profile:
-        return redirect(url_for('setup'))
-    
-    today = datetime.now().strftime("%Y-%m-%d")
-    summary = db.get_daily_summary(today)
-    food_entries = db.get_food_entries_for_date(today)
-    
-    return render_template('status.html',
-                         profile=profile,
-                         summary=summary,
-                         food_entries=food_entries,
-                         today=today)
-
-
-# ═══════════════════════════════════════════════════════════════════
-# REPORTS (WEEKLY/MONTHLY)
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/reports')
-def reports():
-    """Reports page - weekly and monthly"""
-    
-    profile = db.get_profile()
-    if not profile:
-        return redirect(url_for('setup'))
-    
-    today = datetime.now()
-    
-    # Weekly
-    start_of_week = today - timedelta(days=today.weekday())
-    weekly_summaries = db.get_summaries_between_dates(
-        start_of_week.strftime("%Y-%m-%d"),
-        today.strftime("%Y-%m-%d")
-    )
-    
-    # Monthly
-    start_of_month = today.replace(day=1)
-    monthly_summaries = db.get_summaries_between_dates(
-        start_of_month.strftime("%Y-%m-%d"),
-        today.strftime("%Y-%m-%d")
-    )
-    
-    # Calculate totals
-    weekly_total = sum(s['deficit'] for s in weekly_summaries)
-    monthly_total = sum(s['deficit'] for s in monthly_summaries)
-    
-    return render_template('reports.html',
-                         profile=profile,
-                         weekly_summaries=weekly_summaries,
-                         monthly_summaries=monthly_summaries,
-                         weekly_total=weekly_total,
-                         monthly_total=monthly_total)
-
-
-
-# ═══════════════════════════════════════════════════════════════════
-# THIS WEEK VIEW
-# ═══════════════════════════════════════════════════════════════════
-
-@app.route('/week')
-def week_view():
-    """This week view - shows all 7 days with edit option for missed days"""
-    
-    profile = db.get_profile()
-    if not profile:
-        return redirect(url_for('setup'))
-    
-    today = datetime.now()
-    
-    # Get start of week (Monday)
-    start_of_week = today - timedelta(days=today.weekday())
-    
-    # Generate all 7 days of the week
-    week_days = []
-    for i in range(7):
-        day = start_of_week + timedelta(days=i)
-        day_str = day.strftime("%Y-%m-%d")
-        
-        # Get summary for this day
-        summary = db.get_daily_summary(day_str)
-        
-        # Get food entries count
-        food_entries = db.get_food_entries_for_date(day_str)
-        
-        week_days.append({
-            'date': day_str,
-            'day_name': day.strftime("%A"),
-            'day_short': day.strftime("%a"),
-            'is_today': day.date() == today.date(),
-            'is_future': day.date() > today.date(),
-            'summary': summary,
-            'food_count': len(food_entries) if food_entries else 0,
-            'logged': summary is not None
-        })
-    
-    # Calculate week totals
-    total_deficit = sum(day['summary']['deficit'] for day in week_days if day['summary'])
-    days_logged = sum(1 for day in week_days if day['logged'])
-    
-    return render_template('week.html',
-                         profile=profile,
-                         week_days=week_days,
-                         total_deficit=total_deficit,
-                         days_logged=days_logged,
-                         start_of_week=start_of_week.strftime("%Y-%m-%d"),
-                         end_of_week=(start_of_week + timedelta(days=6)).strftime("%Y-%m-%d"))
-
-
-@app.route('/log-day/<date>', methods=['GET'])
-def log_specific_day(date):
-    """Log food for a specific past day"""
-    
-    profile = db.get_profile()
-    if not profile:
-        return redirect(url_for('setup'))
-    
-    # Validate date format
-    try:
-        datetime.strptime(date, "%Y-%m-%d")
-    except ValueError:
-        return redirect(url_for('week_view'))
-    
-    return render_template('log_day.html', profile=profile, log_date=date)
-
-
 @app.route('/api/save-specific-day-log', methods=['POST'])
 def api_save_specific_day_log():
     user_id = session['user']['sub']
@@ -611,21 +422,6 @@ def api_save_specific_day_log():
 # ═══════════════════════════════════════════════════════════════════
 # SAVED MEALS LIBRARY
 # ═══════════════════════════════════════════════════════════════════
-
-@app.route('/meals')
-def saved_meals_page():
-    """Saved meals library page"""
-    
-    profile = db.get_profile()
-    if not profile:
-        return redirect(url_for('setup'))
-    
-    all_meals = db.get_all_saved_meals()
-    
-    return render_template('meals.html',
-                         profile=profile,
-                         meals=all_meals)
-
 
 @app.route('/api/save-meal', methods=['POST'])
 def api_save_meal():
