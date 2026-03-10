@@ -2,11 +2,7 @@ services:
   - type: web
     name: calorie-tracker
     runtime: python
-    buildCommand: |
-      pip install -r requirements.txt
-      curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-      apt-get install -y nodejs
-      cd frontend && npm install && npm run build
+    buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120
     envVars:
       - key: GROQ_API_KEY
