@@ -105,61 +105,6 @@ def auth_me():
 # HOME PAGE
 # ═══════════════════════════════════════════════════════════════════
 
-@app.route('/')
-def index():
-    """Home page - shows today's summary + weekly/monthly deficit + unlogged days alert"""
-    
-    profile = db.get_profile()
-    
-    if not profile:
-        # No profile, redirect to setup
-        return redirect(url_for('setup'))
-    
-    today = datetime.now()
-    today_str = today.strftime("%Y-%m-%d")
-    summary = db.get_daily_summary(today_str)
-    food_entries = db.get_food_entries_for_date(today_str)
-    
-    # Weekly data
-    start_of_week = today - timedelta(days=today.weekday())
-    weekly_summaries = db.get_summaries_between_dates(
-        start_of_week.strftime("%Y-%m-%d"),
-        today_str
-    )
-    weekly_deficit = sum(s['deficit'] for s in weekly_summaries) if weekly_summaries else 0
-    
-    # Monthly data
-    start_of_month = today.replace(day=1)
-    monthly_summaries = db.get_summaries_between_dates(
-        start_of_month.strftime("%Y-%m-%d"),
-        today_str
-    )
-    monthly_deficit = sum(s['deficit'] for s in monthly_summaries) if monthly_summaries else 0
-    
-    # Check for unlogged days this week (excluding future days)
-    unlogged_days = []
-    for i in range(today.weekday() + 1):  # Only check up to today
-        check_day = start_of_week + timedelta(days=i)
-        check_day_str = check_day.strftime("%Y-%m-%d")
-        day_summary = db.get_daily_summary(check_day_str)
-        if not day_summary:
-            unlogged_days.append({
-                'date': check_day_str,
-                'day_name': check_day.strftime("%A")
-            })
-    
-    return render_template('index.html', 
-                         profile=profile,
-                         summary=summary,
-                         food_entries=food_entries,
-                         today=today_str,
-                         weekly_deficit=weekly_deficit,
-                         weekly_days=len(weekly_summaries),
-                         monthly_deficit=monthly_deficit,
-                         monthly_days=len(monthly_summaries),
-                         unlogged_days=unlogged_days)
-
-
 # ═══════════════════════════════════════════════════════════════════
 # API ENDPOINTS FOR REACT
 # ═══════════════════════════════════════════════════════════════════
