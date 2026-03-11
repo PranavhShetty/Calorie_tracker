@@ -299,42 +299,47 @@ def api_parse_food():
 
 @app.route('/api/save-food-log', methods=['POST'])
 def api_save_food_log():
-    user_id = session['user']['sub']
-    data = request.get_json()
-    food_items          = data.get('food_items', [])
-    workout_description = data.get('workout_description', '')
-    calories_burned     = float(data.get('calories_burned', 0))
-    notes               = data.get('notes', '')
-    weight              = data.get('weight')
+    try:
+        user_id = session['user']['sub']
+        data = request.get_json()
+        food_items          = data.get('food_items', [])
+        workout_description = data.get('workout_description', '')
+        calories_burned     = float(data.get('calories_burned', 0))
+        notes               = data.get('notes', '')
+        weight              = data.get('weight')
 
-    today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now().strftime("%Y-%m-%d")
 
-    if weight is not None:
-        db.save_weight(user_id, today, float(weight))
+        if weight is not None:
+            db.save_weight(user_id, today, float(weight))
 
-    for item in food_items:
-        db.add_food_entry(
-            user_id=user_id,
-            date=today,
-            food_name=item['food_name'],
-            calories=item['calories'],
-            protein=item['protein'],
-            carbs=item['carbs'],
-            fats=item['fats'],
-            meal_type='meal',
-            is_saved_meal=item.get('is_saved_meal', False)
+        for item in food_items:
+            db.add_food_entry(
+                user_id=user_id,
+                date=today,
+                food_name=item['food_name'],
+                calories=item['calories'],
+                protein=item['protein'],
+                carbs=item['carbs'],
+                fats=item['fats'],
+                meal_type='meal',
+                is_saved_meal=item.get('is_saved_meal', False)
+            )
+
+        summary = db.calculate_and_save_daily_summary(
+            user_id=user_id, date=today,
+            workout_description=workout_description,
+            calories_burned=calories_burned, notes=notes
         )
 
-    summary = db.calculate_and_save_daily_summary(
-        user_id=user_id, date=today,
-        workout_description=workout_description,
-        calories_burned=calories_burned, notes=notes
-    )
+        # Enforce 6-month retention after every log save
+        db.cleanup_old_data(user_id)
 
-    # Enforce 6-month retention after every log save
-    db.cleanup_old_data(user_id)
-
-    return jsonify({'success': True, 'summary': summary})
+        return jsonify({'success': True, 'summary': summary})
+    except Exception as e:
+        import traceback
+        print("ERROR in save-food-log:", traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/calculate-workout', methods=['POST'])
