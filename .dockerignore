@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+chroma_data/
+calorie_tracker.db
+frontend/node_modules/
+frontend/src/
+frontend/public/
+.git/
+*.md

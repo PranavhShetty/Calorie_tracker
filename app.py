@@ -24,7 +24,7 @@ import os
 
 load_dotenv()
 
-_is_production = os.getenv('RENDER', False)  # Render sets this env var automatically
+_is_production = bool(os.getenv('PRODUCTION', False))
 
 app = Flask(
     __name__,
@@ -32,10 +32,17 @@ app = Flask(
     static_url_path='/static'
 )
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-change-in-production')
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = bool(_is_production)  # HTTPS only in prod
+# SameSite=None required for cross-origin cookies (Cloudflare Pages → Fly.io)
+app.config['SESSION_COOKIE_SAMESITE'] = 'None' if _is_production else 'Lax'
+app.config['SESSION_COOKIE_SECURE'] = _is_production  # HTTPS only in prod
 
-_allowed_origins = ['http://localhost:3000'] if not _is_production else []
+# In production, allow the Cloudflare Pages domain (set ALLOWED_ORIGINS env var)
+# e.g. ALLOWED_ORIGINS=https://calorie-tracker.pages.dev
+_raw_origins = os.getenv('ALLOWED_ORIGINS', '')
+_allowed_origins = [o.strip() for o in _raw_origins.split(',') if o.strip()] if _raw_origins else []
+if not _is_production:
+    _allowed_origins = ['http://localhost:3000']
+
 CORS(app,
      resources={r"/api/*": {"origins": _allowed_origins or "*"}},
      supports_credentials=True)
