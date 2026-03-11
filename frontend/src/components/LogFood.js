@@ -198,7 +198,11 @@ function LogFood({ profile }) {
         weight: todayWeight,
       });
       if (res.data.success) { alert('✅ Food logged successfully!'); navigate('/'); }
-    } catch (e) { alert('Error saving food log'); }
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.message || 'Unknown error';
+      alert(`Error saving food log: ${msg}`);
+      console.error('Save food log error:', e?.response?.data || e);
+    }
     finally { setLoading(false); }
   };
 
