@@ -830,6 +830,49 @@ body {
    REPORTS PAGE
    ═══════════════════════════════════════════════════════════════════ */
 
+.report-section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.report-section-header h3 {
+    margin: 0;
+}
+
+.toggle-group {
+    display: flex;
+    gap: 0.4rem;
+}
+
+.toggle-btn {
+    padding: 0.3rem 0.8rem;
+    border-radius: 20px;
+    border: 1.5px solid var(--primary);
+    background: transparent;
+    color: var(--primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.toggle-btn.active {
+    background: var(--primary);
+    color: white;
+}
+
+.weight-stats {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    background: var(--bg-main);
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+
 .report-table {
     overflow-x: auto;
     margin-bottom: 1.5rem;
