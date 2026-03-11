@@ -51,11 +51,11 @@ def _turso_arg(v):
     if v is None:
         return {"type": "null"}
     if isinstance(v, bool):
-        return {"type": "integer", "value": int(v)}
+        return {"type": "integer", "value": str(int(v))}
     if isinstance(v, int):
-        return {"type": "integer", "value": v}
+        return {"type": "integer", "value": str(v)}
     if isinstance(v, float):
-        return {"type": "float", "value": v}
+        return {"type": "float", "value": str(v)}
     return {"type": "text", "value": str(v)}
 
 
