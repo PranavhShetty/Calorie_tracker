@@ -55,7 +55,7 @@ def _turso_arg(v):
     if isinstance(v, int):
         return {"type": "integer", "value": str(v)}
     if isinstance(v, float):
-        return {"type": "float", "value": str(v)}
+        return {"type": "float", "value": v}
     return {"type": "text", "value": str(v)}
 
 
