@@ -39,6 +39,7 @@ function Login({ onLoginSuccess, apiUrl, darkMode }) {
         onLoginSuccess(res.data.user);
       }
     } catch (e) {
+      console.error('Google sign-in error:', e.response?.status, e.response?.data || e.message);
       setError('Sign-in failed. Please try again.');
     } finally {
       setLoading(false);
@@ -68,8 +69,7 @@ function Login({ onLoginSuccess, apiUrl, darkMode }) {
             <div className="login-google-btn">
               <GoogleLogin
                 onSuccess={handleSuccess}
-                onError={() => setError('Sign-in failed. Please try again.')}
-                useOneTap
+                onError={() => console.warn('Google OAuth flow failed')}
                 theme={darkMode ? 'filled_black' : 'outline'}
                 shape="rectangular"
                 size="large"
