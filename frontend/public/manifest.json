@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "CalorieTracker",
+  "name": "CalorieTracker — Macro Tracking for Indian Foods",
   "icons": [
     {
       "src": "favicon.ico",
