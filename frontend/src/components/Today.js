@@ -4,9 +4,10 @@ import axios from 'axios';
 import { API_URL } from '../App';
 
 function Today({ profile }) {
-  const [summary, setSummary] = useState(null);
-  const [foodEntries, setFoodEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary]           = useState(null);
+  const [foodEntries, setFoodEntries]   = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [deletingId, setDeletingId]     = useState(null); // which entry is being deleted
   const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
@@ -25,13 +26,34 @@ function Today({ profile }) {
     }
   };
 
+  // Delete a single food entry and update the UI immediately
+  const deleteEntry = async (entry) => {
+    if (!window.confirm(`Remove "${entry.food_name}" from today's log?`)) return;
+
+    setDeletingId(entry.id);
+    try {
+      const res = await axios.post(`${API_URL}/api/delete-food-entry`, {
+        entry_id: entry.id,
+        date: today,
+      });
+      // Update both the entry list and the summary with what the server returned
+      setFoodEntries(res.data.food_entries);
+      setSummary(res.data.summary);
+    } catch (e) {
+      console.error('Failed to delete entry:', e);
+      alert('Failed to remove item. Please try again.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (loading) {
     return <div className="loading"><div className="spinner"></div></div>;
   }
 
   return (
     <div className="status-container">
-      <h2>📋 Today's Status - {today}</h2>
+      <h2>📋 Today's Status — {today}</h2>
 
       {summary ? (
         <>
@@ -75,13 +97,29 @@ function Today({ profile }) {
 
           {foodEntries.length > 0 && (
             <div className="card">
-              <h3>🍽️ Food Logged Today ({foodEntries.length} items)</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3>🍽️ Food Logged Today ({foodEntries.length} items)</h3>
+                <Link to="/log" className="btn btn-secondary" style={{ fontSize: '13px', padding: '6px 12px' }}>
+                  + Add More
+                </Link>
+              </div>
               <div className="food-entries-list">
-                {foodEntries.map((entry, idx) => (
-                  <div key={idx} className="food-entry-card">
+                {foodEntries.map((entry) => (
+                  <div key={entry.id} className="food-entry-card">
                     <div className="food-entry-header">
-                      <strong>{entry.food_name}</strong>
-                      {entry.is_saved_meal && <span className="badge badge-saved">SAVED MEAL</span>}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <strong>{entry.food_name}</strong>
+                        {entry.is_saved_meal && <span className="badge badge-saved">SAVED MEAL</span>}
+                      </div>
+                      {/* Delete button — shows a spinner while deleting that specific item */}
+                      <button
+                        className="remove-item-btn"
+                        onClick={() => deleteEntry(entry)}
+                        disabled={deletingId === entry.id}
+                        title="Remove this item"
+                      >
+                        {deletingId === entry.id ? '…' : '✕'}
+                      </button>
                     </div>
                     <div className="food-entry-macros">
                       <span className="macro-pill">{Math.round(entry.calories)} kcal</span>
@@ -92,6 +130,14 @@ function Today({ profile }) {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Show "Add food" card if all items were deleted */}
+          {foodEntries.length === 0 && (
+            <div className="card" style={{ textAlign: 'center', padding: '24px' }}>
+              <p style={{ color: '#64748b', marginBottom: '12px' }}>All items removed.</p>
+              <Link to="/log" className="btn btn-primary">+ Log Food</Link>
             </div>
           )}
 

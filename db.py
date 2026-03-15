@@ -237,6 +237,21 @@ def get_food_entries_for_date(user_id: str, date: str) -> list:
     return [_process_entry(d) for d in r.to_dicts()]
 
 
+def delete_food_entries_for_date(user_id: str, date: str):
+    """Delete all food entries for a given date (used before re-saving an edited log)."""
+    _exec("DELETE FROM food_entries WHERE user_id=? AND date=?", [user_id, date])
+
+
+def delete_food_entry_by_id(user_id: str, entry_id: str) -> bool:
+    """Delete a single food entry by its ID. Returns True if a row was deleted."""
+    # We include user_id in the WHERE clause so users can only delete their own entries
+    r = _exec(
+        "DELETE FROM food_entries WHERE id=? AND user_id=?",
+        [entry_id, user_id]
+    )
+    return True
+
+
 # ── Daily summary ─────────────────────────────────────────────────────────────
 
 def calculate_and_save_daily_summary(user_id: str, date: str,

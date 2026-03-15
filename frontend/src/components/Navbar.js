@@ -84,14 +84,18 @@ function Navbar({ profile, user, darkMode, toggleDarkMode, onLogout }) {
           <span className="mobile-nav-icon">📊</span>
           <span className="mobile-nav-label">Today</span>
         </NavLink>
+        <NavLink to="/week" className={mobileNavClass}>
+          <span className="mobile-nav-icon">📅</span>
+          <span className="mobile-nav-label">This Week</span>
+        </NavLink>
         <NavLink to="/meals" className={mobileNavClass}>
           <span className="mobile-nav-icon">🍽️</span>
           <span className="mobile-nav-label">Meals</span>
         </NavLink>
-        <button className="mobile-nav-item mobile-nav-logout" onClick={onLogout} title="Sign out">
-          <span className="mobile-nav-icon">🚪</span>
-          <span className="mobile-nav-label">Logout</span>
-        </button>
+        <NavLink to="/reports" className={mobileNavClass}>
+          <span className="mobile-nav-icon">📈</span>
+          <span className="mobile-nav-label">Reports</span>
+        </NavLink>
       </nav>
     </>
   );

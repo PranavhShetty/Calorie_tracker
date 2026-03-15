@@ -6,6 +6,26 @@ function Login({ onLoginSuccess, apiUrl, darkMode }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const handleGuest = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await axios.post(
+        `${apiUrl}/api/auth/guest`,
+        {},
+        { withCredentials: true }
+      );
+      if (res.data.success) {
+        onLoginSuccess(res.data.user);
+      }
+    } catch (e) {
+      console.error('Guest sign-in error:', e.response?.status, e.response?.data || e.message);
+      setError('Guest sign-in failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSuccess = async (credentialResponse) => {
     setError('');
     setLoading(true);
@@ -44,18 +64,26 @@ function Login({ onLoginSuccess, apiUrl, darkMode }) {
             <p style={{ marginTop: '0.75rem', color: 'var(--text-secondary)' }}>Signing you in…</p>
           </div>
         ) : (
-          <div className="login-google-btn">
-            <GoogleLogin
-              onSuccess={handleSuccess}
-              onError={() => setError('Sign-in failed. Please try again.')}
-              useOneTap
-              theme={darkMode ? 'filled_black' : 'outline'}
-              shape="rectangular"
-              size="large"
-              text="signin_with"
-              width="280"
-            />
-          </div>
+          <>
+            <div className="login-google-btn">
+              <GoogleLogin
+                onSuccess={handleSuccess}
+                onError={() => setError('Sign-in failed. Please try again.')}
+                useOneTap
+                theme={darkMode ? 'filled_black' : 'outline'}
+                shape="rectangular"
+                size="large"
+                text="signin_with"
+                width="280"
+              />
+            </div>
+            <div className="login-divider-or">
+              <span>or</span>
+            </div>
+            <button className="login-guest-btn" onClick={handleGuest}>
+              Continue as Guest
+            </button>
+          </>
         )}
 
         {error && (

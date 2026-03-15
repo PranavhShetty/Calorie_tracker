@@ -2,10 +2,6 @@
 Flask Web Application for CalorieTracker
 """
 
-"""
-Flask Web Application for CalorieTracker
-"""
-
 print("=" * 50)
 print("STARTING APP.PY")
 print("=" * 50)
@@ -17,7 +13,6 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as grequests
 import db
 import llm
-import meals
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import os
@@ -85,6 +80,21 @@ def auth_google():
         return jsonify({'success': True, 'user': session['user']})
     except ValueError as e:
         return jsonify({'error': 'Invalid token', 'detail': str(e)}), 401
+
+
+@app.route('/api/auth/guest', methods=['POST'])
+def auth_guest():
+    """Create a guest session with a unique ID."""
+    import uuid
+    guest_id = f"guest_{uuid.uuid4().hex}"
+    session['user'] = {
+        'email': '',
+        'name': 'Guest',
+        'picture': '',
+        'sub': guest_id,
+        'is_guest': True,
+    }
+    return jsonify({'success': True, 'user': session['user']})
 
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -397,6 +407,20 @@ def api_weight_history():
     )
     return jsonify({'weights': weights})
 
+@app.route('/api/food-entries-for-date', methods=['GET'])
+def api_food_entries_for_date():
+    """Fetch existing food entries for any date (used when editing a past log)."""
+    user_id = session['user']['sub']
+    date = request.args.get('date')
+    if not date:
+        return jsonify({'error': 'date param required'}), 400
+    summary = db.get_daily_summary(user_id, date)
+    return jsonify({
+        'food_entries': db.get_food_entries_for_date(user_id, date),
+        'summary': summary,
+    })
+
+
 @app.route('/api/save-specific-day-log', methods=['POST'])
 def api_save_specific_day_log():
     user_id = session['user']['sub']
@@ -406,6 +430,9 @@ def api_save_specific_day_log():
     workout_description = data.get('workout_description', '')
     calories_burned     = float(data.get('calories_burned', 0))
     notes               = data.get('notes', '')
+
+    # Delete old entries so editing replaces instead of appending
+    db.delete_food_entries_for_date(user_id, log_date)
 
     for item in food_items:
         db.add_food_entry(
@@ -454,6 +481,26 @@ def api_delete_meal():
     data = request.get_json()
     db.delete_saved_meal(user_id, data.get('label'))
     return jsonify({'success': True})
+
+
+@app.route('/api/delete-food-entry', methods=['POST'])
+def api_delete_food_entry():
+    """Delete a single food entry and recalculate the daily summary."""
+    user_id = session['user']['sub']
+    data = request.get_json()
+    entry_id = data.get('entry_id')
+    date = data.get('date')
+
+    if not entry_id or not date:
+        return jsonify({'error': 'entry_id and date are required'}), 400
+
+    db.delete_food_entry_by_id(user_id, entry_id)
+
+    # Recalculate the daily summary so totals stay accurate
+    summary = db.calculate_and_save_daily_summary(user_id=user_id, date=date)
+    remaining = db.get_food_entries_for_date(user_id, date)
+
+    return jsonify({'success': True, 'summary': summary, 'food_entries': remaining})
 
 
 # ═══════════════════════════════════════════════════════════════════
