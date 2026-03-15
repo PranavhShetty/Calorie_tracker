@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="256" fill="#10b981"/>
+
+  <!-- Bowl base (ellipse bottom) -->
+  <ellipse cx="256" cy="310" rx="130" ry="38" fill="#065f46"/>
+
+  <!-- Bowl body -->
+  <path d="M126 230 Q126 330 256 330 Q386 330 386 230 Z" fill="#ffffff"/>
+
+  <!-- Salad greens -->
+  <ellipse cx="210" cy="222" rx="38" ry="22" fill="#34d399" transform="rotate(-15 210 222)"/>
+  <ellipse cx="256" cy="210" rx="42" ry="20" fill="#6ee7b7" transform="rotate(5 256 210)"/>
+  <ellipse cx="302" cy="220" rx="36" ry="22" fill="#34d399" transform="rotate(12 302 220)"/>
+  <ellipse cx="232" cy="208" rx="28" ry="16" fill="#a7f3d0" transform="rotate(-8 232 208)"/>
+  <ellipse cx="278" cy="205" rx="30" ry="15" fill="#a7f3d0" transform="rotate(10 278 205)"/>
+
+  <!-- Fork -->
+  <rect x="176" y="140" width="10" height="65" rx="4" fill="#ffffff"/>
+  <rect x="165" y="140" width="6" height="32" rx="2" fill="#ffffff"/>
+  <rect x="187" y="140" width="6" height="32" rx="2" fill="#ffffff"/>
+  <rect x="176" y="167" width="10" height="5" rx="2" fill="#ffffff"/>
+
+  <!-- Spoon -->
+  <rect x="326" y="158" width="10" height="60" rx="4" fill="#ffffff"/>
+  <ellipse cx="331" cy="148" rx="12" ry="16" fill="#ffffff"/>
+</svg>
