@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../App';
+import { getCache, setCache, invalidateCache } from '../apiCache';
 
 function Today({ profile }) {
   const [summary, setSummary]           = useState(null);
@@ -15,8 +16,16 @@ function Today({ profile }) {
   }, []);
 
   const fetchTodayData = async () => {
+    const cached = getCache('today-data');
+    if (cached) {
+      setSummary(cached.summary);
+      setFoodEntries(cached.food_entries);
+      setLoading(false);
+      return;
+    }
     try {
       const response = await axios.get(`${API_URL}/api/today-data`);
+      setCache('today-data', response.data);
       setSummary(response.data.summary);
       setFoodEntries(response.data.food_entries);
     } catch (error) {
@@ -39,6 +48,7 @@ function Today({ profile }) {
       // Update both the entry list and the summary with what the server returned
       setFoodEntries(res.data.food_entries);
       setSummary(res.data.summary);
+      invalidateCache('today-data', 'home-data');
     } catch (e) {
       console.error('Failed to delete entry:', e);
       alert('Failed to remove item. Please try again.');

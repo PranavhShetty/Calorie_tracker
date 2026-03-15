@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../App';
+import { getCache, setCache, invalidateCache } from '../apiCache';
 
 function Meals({ profile }) {
   const [meals, setMeals] = useState([]);
@@ -21,8 +22,11 @@ function Meals({ profile }) {
   }, []);
 
   const fetchMeals = async () => {
+    const cached = getCache('meals');
+    if (cached) { setMeals(cached); setLoading(false); return; }
     try {
       const response = await axios.get(`${API_URL}/api/get-meals`);
+      setCache('meals', response.data.meals || []);
       setMeals(response.data.meals || []);
     } catch (error) {
       console.error('Error fetching meals:', error);
@@ -67,6 +71,7 @@ function Meals({ profile }) {
         aliases: '',
         description: ''
       });
+      invalidateCache('meals');
       fetchMeals(); // Refresh list
     } catch (error) {
       console.error('Error saving meal:', error);
@@ -82,6 +87,7 @@ function Meals({ profile }) {
     try {
       await axios.post(`${API_URL}/api/delete-meal`, { label });
       alert('✅ Meal deleted successfully!');
+      invalidateCache('meals');
       fetchMeals(); // Refresh list
     } catch (error) {
       console.error('Error deleting meal:', error);

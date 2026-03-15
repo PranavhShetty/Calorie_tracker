@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../App';
+import { getCache, setCache } from '../apiCache';
 
 function Week({ profile }) {
   const [weekDays, setWeekDays] = useState([]);
@@ -15,8 +16,18 @@ function Week({ profile }) {
   }, []);
 
   const fetchWeekData = async () => {
+    const cached = getCache('week-data');
+    if (cached) {
+      setWeekDays(cached.week_days);
+      setTotalDeficit(cached.total_deficit);
+      setDaysLogged(cached.days_logged);
+      setWeekRange({ start: cached.start_of_week, end: cached.end_of_week });
+      setLoading(false);
+      return;
+    }
     try {
       const response = await axios.get(`${API_URL}/api/week-data`);
+      setCache('week-data', response.data);
       setWeekDays(response.data.week_days);
       setTotalDeficit(response.data.total_deficit);
       setDaysLogged(response.data.days_logged);

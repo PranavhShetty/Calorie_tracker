@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../App';
+import { getCache, setCache } from '../apiCache';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -135,10 +136,24 @@ function Home({ profile }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const cachedHome    = getCache('home-data');
+    const cachedReports = getCache('reports-data');
+    if (cachedHome && cachedReports) {
+      setSummary(cachedHome.summary);
+      setUnloggedDays(cachedHome.unlogged_days || []);
+      setWeeklySummaries(cachedReports.weekly_summaries || []);
+      setMonthlySummaries(cachedReports.monthly_summaries || []);
+      setWeeklyTotal(cachedReports.weekly_total || 0);
+      setMonthlyTotal(cachedReports.monthly_total || 0);
+      setLoading(false);
+      return;
+    }
     Promise.all([
-      axios.get(`${API_URL}/api/home-data`),
-      axios.get(`${API_URL}/api/reports-data`),
+      cachedHome    ? Promise.resolve({ data: cachedHome })    : axios.get(`${API_URL}/api/home-data`),
+      cachedReports ? Promise.resolve({ data: cachedReports }) : axios.get(`${API_URL}/api/reports-data`),
     ]).then(([homeRes, reportsRes]) => {
+      if (!cachedHome)    setCache('home-data', homeRes.data);
+      if (!cachedReports) setCache('reports-data', reportsRes.data);
       setSummary(homeRes.data.summary);
       setUnloggedDays(homeRes.data.unlogged_days || []);
       setWeeklySummaries(reportsRes.data.weekly_summaries || []);

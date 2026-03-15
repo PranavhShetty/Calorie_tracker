@@ -29,6 +29,8 @@ app = Flask(
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-change-in-production')
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = bool(_is_production)  # HTTPS only in prod
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 _allowed_origins = ['http://localhost:3000'] if not _is_production else []
 CORS(app,
@@ -71,6 +73,7 @@ def auth_google():
         idinfo = id_token.verify_oauth2_token(
             credential, grequests.Request(), GOOGLE_CLIENT_ID
         )
+        session.permanent = True
         session['user'] = {
             'email': idinfo['email'],
             'name':  idinfo.get('name', ''),
@@ -87,6 +90,7 @@ def auth_guest():
     """Create a guest session with a unique ID."""
     import uuid
     guest_id = f"guest_{uuid.uuid4().hex}"
+    session.permanent = True
     session['user'] = {
         'email': '',
         'name': 'Guest',

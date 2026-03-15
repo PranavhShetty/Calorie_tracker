@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { API_URL } from '../App';
+import { getCache, setCache } from '../apiCache';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -23,8 +24,18 @@ function Reports({ profile }) {
   }, [weightDays]);
 
   const fetchReportsData = async () => {
+    const cached = getCache('reports-data');
+    if (cached) {
+      setWeeklySummaries(cached.weekly_summaries);
+      setMonthlySummaries(cached.monthly_summaries);
+      setWeeklyTotal(cached.weekly_total);
+      setMonthlyTotal(cached.monthly_total);
+      setLoading(false);
+      return;
+    }
     try {
       const response = await axios.get(`${API_URL}/api/reports-data`);
+      setCache('reports-data', response.data);
       setWeeklySummaries(response.data.weekly_summaries);
       setMonthlySummaries(response.data.monthly_summaries);
       setWeeklyTotal(response.data.weekly_total);
@@ -37,14 +48,17 @@ function Reports({ profile }) {
   };
 
   const fetchWeightHistory = async (days) => {
+    const key = `weight-history-${days}`;
+    const cached = getCache(key);
+    if (cached) { setWeightData(cached); return; }
     try {
       const res = await axios.get(`${API_URL}/api/weight-history?days=${days}`);
-      setWeightData(
-        (res.data.weights || []).map(w => ({
-          date: w.date.slice(5),   // "MM-DD"
-          weight: w.weight,
-        }))
-      );
+      const mapped = (res.data.weights || []).map(w => ({
+        date: w.date.slice(5),   // "MM-DD"
+        weight: w.weight,
+      }));
+      setCache(key, mapped);
+      setWeightData(mapped);
     } catch (error) {
       console.error('Error fetching weight history:', error);
     }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { API_URL } from '../App';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { invalidateCache } from '../apiCache';
 
 // ── Audio Transcription Hook (MediaRecorder → Groq Whisper) ──────
 function useAudioTranscription(apiUrl) {
@@ -272,6 +273,7 @@ function LogFood({ profile }) {
           calories_burned:     caloriesBurned,
           notes,
         });
+        invalidateCache('week-data', 'home-data', 'reports-data');
         navigate('/week');
       } else {
         // New log: save to today (handles weight logging too)
@@ -282,6 +284,7 @@ function LogFood({ profile }) {
           notes,
           weight: !hasWeightToday && weightToday ? parseFloat(weightToday) : null,
         });
+        invalidateCache('today-data', 'home-data', 'week-data', 'reports-data', 'weight-history-30', 'weight-history-90');
         navigate('/');
       }
     } catch (e) {
