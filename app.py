@@ -194,13 +194,19 @@ def api_week_data():
 
     today = datetime.now()
     start_of_week = today - timedelta(days=today.weekday())
+    start_str = start_of_week.strftime("%Y-%m-%d")
+    end_str   = (start_of_week + timedelta(days=6)).strftime("%Y-%m-%d")
+
+    # 2 bulk queries instead of 14 individual ones
+    summaries_list = db.get_summaries_between_dates(user_id, start_str, end_str)
+    summaries_map  = {s['date']: s for s in summaries_list}
+    food_map       = db.get_food_entries_between_dates(user_id, start_str, end_str)
 
     week_days = []
     for i in range(7):
-        day = start_of_week + timedelta(days=i)
+        day     = start_of_week + timedelta(days=i)
         day_str = day.strftime("%Y-%m-%d")
-        summary      = db.get_daily_summary(user_id, day_str)
-        food_entries = db.get_food_entries_for_date(user_id, day_str)
+        summary = summaries_map.get(day_str)
         week_days.append({
             'date':       day_str,
             'day_name':   day.strftime("%A"),
@@ -208,7 +214,7 @@ def api_week_data():
             'is_today':   day.date() == today.date(),
             'is_future':  day.date() > today.date(),
             'summary':    summary,
-            'food_count': len(food_entries) if food_entries else 0,
+            'food_count': len(food_map.get(day_str, [])),
             'logged':     summary is not None
         })
 

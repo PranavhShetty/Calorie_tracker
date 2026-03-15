@@ -11,6 +11,8 @@ from datetime import datetime, timedelta
 
 import requests as _requests
 
+_session = _requests.Session()
+
 MAX_SAVED_MEALS = 5000
 RETENTION_DAYS  = 183   # ~6 months
 
@@ -86,7 +88,7 @@ def _exec_turso(sql: str, args: list = None) -> _Result:
             {"type": "close"},
         ]
     }
-    resp = _requests.post(
+    resp = _session.post(
         f"{_HTTP_URL}/v2/pipeline",
         headers=_HEADERS,
         json=payload,
@@ -235,6 +237,19 @@ def get_food_entries_for_date(user_id: str, date: str) -> list:
         [user_id, date]
     )
     return [_process_entry(d) for d in r.to_dicts()]
+
+
+def get_food_entries_between_dates(user_id: str, start_date: str, end_date: str) -> dict:
+    """Return {date: [entries]} for all dates in range — one query instead of N."""
+    rows = _exec(
+        "SELECT * FROM food_entries WHERE user_id=? AND date>=? AND date<=? ORDER BY date, logged_at",
+        [user_id, start_date, end_date]
+    ).to_dicts()
+    result = {}
+    for d in rows:
+        d = _process_entry(d)
+        result.setdefault(d["date"], []).append(d)
+    return result
 
 
 def delete_food_entries_for_date(user_id: str, date: str):

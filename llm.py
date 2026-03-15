@@ -15,7 +15,7 @@ load_dotenv()
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 # Default model to use
-MODEL = "llama-3.3-70b-versatile"  # Fast and accurate for our use case
+MODEL = "llama-3.1-8b-instant"  # Groq's fastest model — ~3x quicker for structured JSON tasks
 
 
 # ═══════════════════════════════════════════════════════════════════
