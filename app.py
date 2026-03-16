@@ -374,10 +374,15 @@ def api_calculate_workout():
         return jsonify({'total_calories': 0, 'breakdown': []})
     
     result = llm.calculate_workout_calories(workout_description, weight)
-    
+
     if result is None:
         return jsonify({'error': 'Failed to calculate workout calories'}), 500
-    
+
+    # Apply 90% correction factor (Groq tends to overestimate)
+    result['total_calories'] = round(result['total_calories'] * 0.9, 1)
+    for item in result.get('breakdown', []):
+        item['calories'] = round(item['calories'] * 0.9, 1)
+
     return jsonify(result)
 
 
