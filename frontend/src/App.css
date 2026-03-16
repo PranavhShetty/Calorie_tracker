@@ -2711,6 +2711,13 @@ html[data-theme="dark"] .dash-tab-active {
 .dash-accent-green .dash-stat-value { color: #10b981; }
 .dash-accent-red .dash-stat-value   { color: #ef4444; }
 
+.dash-stat-sub {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.2;
+}
+
 /* Chart card */
 .dash-chart-card {
   background: var(--bg-card);

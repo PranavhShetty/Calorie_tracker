@@ -170,7 +170,9 @@ function Home({ profile }) {
 
   // ── Daily
   const dailyConsumed = summary ? Math.round(summary.total_calories_in) : 0;
-  const dailyDeficit = dailyConsumed - bmr; // negative = under budget = good
+  const caloriesBurned = summary ? Math.round(summary.calories_burned) : 0;
+  const totalBurned = summary ? Math.round(summary.total_burned) : bmr;
+  const dailyDeficit = dailyConsumed - totalBurned; // negative = under budget = good
 
   // ── Weekly
   const wLogged = weeklySummaries.length;
@@ -216,7 +218,7 @@ function Home({ profile }) {
         <div className="dash-content">
           <div className="dash-ring-card">
             {summary ? (
-              <RingGauge consumed={dailyConsumed} target={bmr} />
+              <RingGauge consumed={dailyConsumed} target={totalBurned} />
             ) : (
               <div className="dash-no-data">
                 <p>Nothing logged today</p>
@@ -232,8 +234,11 @@ function Home({ profile }) {
               <div className="dash-stat-value">{dailyConsumed.toLocaleString()}</div>
             </div>
             <div className="dash-stat-card">
-              <div className="dash-stat-label">Target</div>
-              <div className="dash-stat-value">{bmr.toLocaleString()}</div>
+              <div className="dash-stat-label">Burned</div>
+              <div className="dash-stat-value">{totalBurned.toLocaleString()}</div>
+              {caloriesBurned > 0 && (
+                <div className="dash-stat-sub">BMR {bmr} + {caloriesBurned} workout</div>
+              )}
             </div>
             <div className={`dash-stat-card ${dailyDeficit <= 0 ? 'dash-accent-green' : 'dash-accent-red'}`}>
               <div className="dash-stat-label">Deficit</div>
