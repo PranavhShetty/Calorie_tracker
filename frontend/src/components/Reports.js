@@ -89,44 +89,46 @@ function Reports({ profile }) {
           </div>
         </div>
 
-        {weightData.length >= 2 ? (
+        {weightData.length >= 1 ? (
           <>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={weightData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis
-                  domain={['auto', 'auto']}
-                  tick={{ fontSize: 11 }}
-                  tickFormatter={v => `${v}kg`}
-                />
-                <Tooltip formatter={(v) => [`${v} kg`, 'Weight']} />
-                <Line
-                  type="monotone"
-                  dataKey="weight"
-                  stroke="var(--primary)"
-                  strokeWidth={2}
-                  dot={{ r: 3 }}
-                  activeDot={{ r: 5 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {weightData.length >= 2 && (
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={weightData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                  <YAxis
+                    domain={['auto', 'auto']}
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={v => `${v}kg`}
+                  />
+                  <Tooltip formatter={(v) => [`${v} kg`, 'Weight']} />
+                  <Line
+                    type="monotone"
+                    dataKey="weight"
+                    stroke="var(--primary)"
+                    strokeWidth={2}
+                    dot={{ r: 3 }}
+                    activeDot={{ r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )}
             <div className="weight-stats">
               <span>Start: <strong>{weightData[0].weight} kg</strong></span>
-              <span>
-                Change:{' '}
-                <strong className={weightData[weightData.length-1].weight - weightData[0].weight <= 0 ? 'positive-text' : 'negative-text'}>
-                  {(weightData[weightData.length-1].weight - weightData[0].weight > 0 ? '+' : '')}
-                  {(weightData[weightData.length-1].weight - weightData[0].weight).toFixed(1)} kg
-                </strong>
-              </span>
+              {weightData.length >= 2 && (
+                <span>
+                  Change:{' '}
+                  <strong className={weightData[weightData.length-1].weight - weightData[0].weight <= 0 ? 'positive-text' : 'negative-text'}>
+                    {(weightData[weightData.length-1].weight - weightData[0].weight > 0 ? '+' : '')}
+                    {(weightData[weightData.length-1].weight - weightData[0].weight).toFixed(1)} kg
+                  </strong>
+                </span>
+              )}
               <span>Latest: <strong>{weightData[weightData.length-1].weight} kg</strong></span>
             </div>
           </>
         ) : (
-          <p className="empty-message">
-            {weightData.length === 1 ? 'Log weight on at least 2 days to see the graph.' : 'No weight data yet. Log your weight when saving a food entry.'}
-          </p>
+          <p className="empty-message">No weight data yet. Log your weight when saving a food entry.</p>
         )}
       </div>
 

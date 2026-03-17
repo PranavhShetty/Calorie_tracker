@@ -2680,7 +2680,7 @@ html[data-theme="dark"] .dash-tab-active {
 /* Stat row + cards */
 .dash-stat-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 0.6rem;
   margin-bottom: 0.5rem;
 }
